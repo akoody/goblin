@@ -1,0 +1,333 @@
+.offers {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 28px var(--sides-padding) 42px;
+
+  &_header {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 16px;
+
+    > div {
+      display: grid;
+      gap: 6px;
+    }
+
+    p {
+      max-width: 680px;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 150%;
+    }
+
+    a {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      min-height: 42px;
+      padding: 0 16px;
+      color: #fff;
+      background: var(--green-gradient);
+      border-radius: var(--radius-sm);
+      box-shadow: var(--button-shadow);
+      font-size: 14px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+  }
+
+  &_toolbar,
+  &_stats,
+  &_table {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(18px);
+  }
+
+  &_toolbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px;
+
+    > div {
+      display: inline-flex;
+      gap: 4px;
+      padding: 4px;
+      background: var(--surface-muted);
+      border: 1px solid var(--border);
+      border-radius: 999px;
+    }
+
+    button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      min-height: 38px;
+      padding: 0 14px;
+      color: var(--text-muted);
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    > button {
+      color: var(--text-dark);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+    }
+  }
+
+  &_filterActive {
+    color: var(--primary-deep) !important;
+    background: #fff;
+    box-shadow: 0 8px 18px rgba(32, 40, 32, 0.08);
+  }
+
+  &_stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px;
+    padding: 14px;
+
+    div {
+      display: grid;
+      gap: 5px;
+      padding: 14px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+    }
+
+    span {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    strong {
+      color: var(--text-dark);
+      font-size: 26px;
+      font-weight: 900;
+    }
+  }
+
+  &_table {
+    display: grid;
+    gap: 0;
+    overflow-x: auto;
+    padding: 14px;
+  }
+
+  &_tableHead,
+  &_row {
+    display: grid;
+    grid-template-columns: minmax(120px, 0.82fr) minmax(110px, 0.76fr) minmax(130px, 0.9fr) minmax(130px, 0.9fr) minmax(150px, 1fr) minmax(150px, 1fr) minmax(230px, 1.4fr);
+    gap: 12px;
+    min-width: 980px;
+    align-items: center;
+    padding: 0 14px;
+  }
+
+  &_tableHead {
+    min-height: 42px;
+    color: var(--text-muted);
+    background: var(--surface-raised);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+    font-size: 11px;
+    font-weight: 900;
+    text-transform: uppercase;
+  }
+
+  &_row {
+    min-height: 64px;
+    color: var(--text-dark);
+    background: #fff;
+    border-right: 1px solid var(--border);
+    border-bottom: 1px solid var(--border);
+    border-left: 1px solid var(--border);
+    font-size: 13px;
+    font-weight: 750;
+    text-decoration: none;
+
+    &:hover {
+      background: rgba(234, 245, 223, 0.34);
+    }
+
+    b {
+      color: var(--primary-deep);
+      font-size: 13px;
+      font-weight: 900;
+      text-align: right;
+    }
+  }
+
+  &_status_pending,
+  &_status_paused,
+  &_status_cancelled {
+    display: block;
+    width: fit-content;
+    margin-top: 5px;
+    padding: 4px 7px;
+    border-radius: 999px;
+    font-size: 10px;
+    font-weight: 900;
+  }
+
+  &_status_pending {
+    color: var(--primary-deep);
+    background: var(--primary-soft);
+  }
+
+  &_status_paused {
+    color: #8a6200;
+    background: rgba(233, 169, 7, 0.14);
+  }
+
+  &_status_cancelled {
+    color: #8d210d;
+    background: var(--danger-soft);
+  }
+
+  &_actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+
+    a,
+    button {
+      min-height: 30px;
+      padding: 0 9px;
+      color: var(--text-dark);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 11px;
+      font-weight: 900;
+      text-decoration: none;
+
+      &:disabled {
+        cursor: not-allowed;
+        opacity: 0.45;
+      }
+    }
+
+    a {
+      color: var(--primary-deep);
+      background: var(--primary-soft);
+      border-color: rgba(76, 161, 31, 0.18);
+    }
+  }
+
+  &_side_buy,
+  &_side_sell {
+    width: fit-content;
+    padding: 6px 9px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 900;
+  }
+
+  &_side_buy {
+    color: var(--primary-deep);
+    background: var(--primary-soft);
+  }
+
+  &_side_sell {
+    color: #8d210d;
+    background: var(--danger-soft);
+  }
+
+  &_methods {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 5px;
+
+    em,
+    small {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 7px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      color: var(--text-dark);
+      font-size: 11px;
+      font-style: normal;
+      font-weight: 900;
+    }
+
+    em {
+      background: color-mix(in srgb, var(--method-tone) 15%, white);
+      border-color: color-mix(in srgb, var(--method-tone) 30%, white);
+    }
+  }
+
+  &_empty {
+    display: grid;
+    place-content: center;
+    gap: 7px;
+    min-height: 180px;
+    color: var(--text-muted);
+    text-align: center;
+    background: #fff;
+    border: 1px dashed var(--border-strong);
+    border-radius: var(--radius-md);
+
+    h2 {
+      color: var(--text-dark);
+      font-size: 20px;
+      font-weight: 900;
+    }
+
+    p {
+      font-size: 14px;
+      font-weight: 750;
+    }
+  }
+
+  @media (max-width: 760px) {
+    padding-top: 18px;
+    padding-bottom: 96px;
+
+    &_header,
+    &_toolbar {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    &_header a,
+    &_toolbar > button {
+      width: 100%;
+    }
+
+    &_toolbar > div {
+      width: 100%;
+
+      button {
+        flex: 1;
+      }
+    }
+
+    &_stats {
+      grid-template-columns: 1fr;
+    }
+
+    &_table {
+      padding: 12px;
+      border-radius: var(--radius-md);
+    }
+  }
+}

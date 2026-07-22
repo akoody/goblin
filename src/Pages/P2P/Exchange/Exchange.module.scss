@@ -1,0 +1,411 @@
+.exchange {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  padding: 28px var(--sides-padding) 42px;
+
+  &_header {
+    div {
+      display: grid;
+      gap: 6px;
+    }
+
+    p {
+      max-width: 720px;
+      color: var(--text-muted);
+      font-size: 14px;
+      line-height: 150%;
+    }
+  }
+
+  &_toolbar,
+  &_table {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-soft);
+    backdrop-filter: blur(18px);
+  }
+
+  &_toolbar {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+  }
+
+  &_tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    p {
+      min-width: 112px;
+      min-height: 34px;
+      padding: 8px 12px;
+      color: var(--text-muted);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 850;
+      text-align: center;
+      cursor: pointer;
+
+      &:first-child {
+        color: var(--primary-deep);
+        background: var(--primary-soft);
+        border-color: rgba(76, 161, 31, 0.18);
+      }
+    }
+  }
+
+  &_filters {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto;
+    align-items: center;
+    gap: 12px;
+
+    select {
+      min-height: 42px;
+      padding: 0 12px;
+      color: var(--text-dark);
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      font-size: 14px;
+      font-weight: 800;
+    }
+  }
+
+  &_filterGroup {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-width: 0;
+  }
+
+  &_sideButton {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 42px;
+    padding: 0 14px;
+    color: var(--text-muted);
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    font-weight: 850;
+
+    img {
+      width: 16px;
+      height: 16px;
+    }
+
+    &_activeBuy {
+      color: #fff;
+      background: var(--green-gradient);
+      border: 0;
+    }
+
+    &_activeSell {
+      color: #fff;
+      background: var(--red-gradient);
+      border: 0;
+    }
+  }
+
+  &_amountInput {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 0 10px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+
+    input {
+      width: 92px;
+      background: transparent;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 850;
+    }
+  }
+
+  &_apply {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    color: var(--text-muted);
+
+    button {
+      min-height: 42px;
+      padding: 0 14px;
+      color: #fff;
+      background: var(--green-gradient);
+      border-radius: var(--radius-sm);
+      font-size: 13px;
+      font-weight: 850;
+      opacity: 0.72;
+    }
+  }
+
+  &_table {
+    display: grid;
+    gap: 12px;
+    padding: 14px;
+    overflow: hidden;
+  }
+
+  &_tableHead,
+  &_row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.25fr) minmax(86px, 0.56fr) minmax(0, 1.08fr) minmax(104px, 0.7fr) minmax(118px, 0.76fr) minmax(112px, 0.68fr);
+    gap: 14px;
+    align-items: center;
+    width: 100%;
+    min-width: 0;
+  }
+
+  &_tableHead {
+    padding: 0 12px;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 850;
+    text-transform: uppercase;
+  }
+
+  &_divider {
+    height: 3px;
+    width: 100%;
+    border-radius: 999px;
+
+    &_buy {
+      background: var(--green-gradient);
+    }
+
+    &_sell {
+      background: var(--red-gradient);
+    }
+  }
+
+  &_rows {
+    display: grid;
+    gap: 10px;
+  }
+
+  &_row {
+    padding: 14px 12px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-md);
+    box-shadow: 0 8px 20px rgba(32, 40, 32, 0.05);
+  }
+
+  &_merchant,
+  &_price,
+  &_stats {
+    display: grid;
+    gap: 3px;
+
+    p {
+      color: var(--text-dark);
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    span {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+  }
+
+  &_limits {
+    display: grid;
+    gap: 6px;
+
+    div {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    p {
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 700;
+
+      &:last-child {
+        color: var(--text-dark);
+        font-weight: 850;
+      }
+    }
+
+    span {
+      color: var(--primary-deep);
+    }
+  }
+
+  &_methods {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+
+    img {
+      width: 24px;
+      height: 24px;
+      object-fit: contain;
+      padding: 3px;
+      background: var(--surface-raised);
+      border-radius: 50%;
+    }
+  }
+
+  &_buyButton,
+  &_sellButton {
+    justify-self: end;
+    min-height: 38px;
+    padding: 0 14px;
+    color: #fff;
+    border-radius: var(--radius-sm);
+    font-size: 12px;
+    font-weight: 850;
+    white-space: nowrap;
+  }
+
+  &_buyButton {
+    background: var(--green-gradient);
+  }
+
+  &_sellButton {
+    background: var(--red-gradient);
+  }
+
+  &_modalOverlay {
+    position: fixed;
+    inset: 0;
+    z-index: 2000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: rgba(11, 16, 10, 0.58);
+    backdrop-filter: blur(8px);
+  }
+
+  &_modalBackdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+    background: transparent;
+  }
+
+  &_modal {
+    position: relative;
+    z-index: 2;
+    max-width: min(100%, 760px);
+    max-height: calc(100vh - 36px);
+    overflow: auto;
+    padding: 28px;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+  }
+
+  @media (max-width: 900px) {
+    &_filters {
+      grid-template-columns: 1fr;
+    }
+
+    &_apply,
+    &_filters > select {
+      justify-self: stretch;
+    }
+
+    &_apply button {
+      flex: 1;
+    }
+  }
+
+  @media (max-width: 980px) {
+    &_tableHead {
+      display: none;
+    }
+
+    &_row {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    &_merchant {
+      grid-column: 1 / -1;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    &_methods {
+      align-self: center;
+    }
+
+    &_buyButton,
+    &_sellButton {
+      justify-self: stretch;
+      width: 100%;
+    }
+  }
+
+  @media (max-width: 640px) {
+    padding-top: 18px;
+
+    &_toolbar,
+    &_table {
+      padding: 12px;
+      border-radius: var(--radius-md);
+    }
+
+    &_filterGroup {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+
+      select,
+      .exchange_amountInput {
+        grid-column: 1 / -1;
+      }
+    }
+
+    &_sideButton {
+      justify-content: center;
+    }
+
+    &_tabs p {
+      flex: 1 1 100%;
+      min-width: 0;
+    }
+
+    &_row {
+      grid-template-columns: 1fr;
+    }
+
+    &_limits div {
+      align-items: flex-start;
+      flex-direction: column;
+      gap: 3px;
+    }
+
+    &_modal {
+      padding: 18px;
+    }
+  }
+}

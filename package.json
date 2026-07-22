@@ -1,0 +1,53 @@
+{
+  "name": "goblin",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@testing-library/dom": "^10.4.0",
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.2.0",
+    "@testing-library/user-event": "^13.5.0",
+    "axios": "^1.8.4",
+    "dotenv": "^16.4.7",
+    "jwt-decode": "^4.0.0",
+    "notistack": "^3.0.2",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0",
+    "react-icons": "^5.5.0",
+    "react-number-format": "^5.4.4",
+    "react-qr-code": "^2.0.18",
+    "react-router-dom": "^7.4.1",
+    "socket.io-client": "^4.8.1",
+    "toastify": "^2.0.1",
+    "web-vitals": "^2.1.4"
+  },
+  "scripts": {
+    "dev": "vite",
+    "start": "vite",
+    "build": "vite build",
+    "test": "echo 'No tests configured'",
+    "eject": "echo 'Eject not available with Vite'",
+    "tw": "tailwindcss -i ./src/index.css -o ./src/output.css --watch"
+  },
+  "browserslist": {
+    "production": [
+      ">0.2%",
+      "not dead",
+      "not op_mini all"
+    ],
+    "development": [
+      "last 1 chrome version",
+      "last 1 firefox version",
+      "last 1 safari version"
+    ]
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "^4.3.0",
+    "@tailwindcss/postcss": "^4.1.18",
+    "@vitejs/plugin-react": "^5.1.0",
+    "autoprefixer": "^10.4.27",
+    "postcss": "^8.5.9",
+    "sass": "^1.93.3",
+    "tailwindcss": "^4.3.0"
+  }
+}
