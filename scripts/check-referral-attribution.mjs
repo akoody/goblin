@@ -1,0 +1,15 @@
+import assert from 'node:assert/strict';
+import { captureReferral, normalizeReferral } from '../src/utils/referralAttribution.js';
+const memory = new Map();
+const storage = { getItem: key => memory.get(key) || null, setItem: (key, value) => memory.set(key, value), removeItem: key => memory.delete(key) };
+assert.equal(normalizeReferral('<script>'), '');
+assert.equal(captureReferral('?ref=gbl000001', storage, 1000), 'GBL000001');
+assert.equal(captureReferral('', storage, 2000), 'GBL000001');
+assert.equal(captureReferral('?ref=GBL000002', storage, 3000), 'GBL000001');
+assert.equal(captureReferral('?ref=GBL000002', storage, 31 * 86400000), 'GBL000002');
+memory.set('goblin.referral', '{bad');
+assert.equal(captureReferral('?ref=GBL000003', storage, 10), 'GBL000003');
+const denied = { getItem() { throw Error('denied'); }, setItem() { throw Error('denied'); }, removeItem() { throw Error('denied'); } };
+assert.equal(captureReferral('?ref=GBL000004', denied, 100), 'GBL000004');
+assert.equal(captureReferral('?ref=invalid-code', denied, 100), '');
+console.log('PASS referral attribution: normalization, navigation, first touch, expiry, corrupt/denied storage');

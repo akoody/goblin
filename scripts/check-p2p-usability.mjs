@@ -1,0 +1,66 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {chromium} from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+const base=process.env.DESIGN_UI_BASE||'http://127.0.0.1:5178';
+const email=(fs.readFileSync('.env','utf8').match(/^VITE_ADMIN_EMAILS=(.*)$/m)?.[1]||'').replace(/^['"]|['"]$/g,'').split(/[,;\n]/)[0].trim();
+const token='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({userId:1,email,exp:9999999999})).toString('base64url')+'.mock';
+const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+let checks=0;
+try{for(const width of [320,390,768,1440,1920]){
+ const context=await browser.newContext({viewport:{width,height:960},hasTouch:true});context.setDefaultTimeout(10000);
+ await context.addInitScript(token=>localStorage.setItem('token',token),token);
+ const page=await context.newPage(),errors=[],writes=[],searches=[];
+ page.on('pageerror',e=>errors.push(e.message));page.on('dialog',dialog=>dialog.accept());
+ let feePercent=5;let orders=Array.from({length:23},(_,i)=>({id:100+i,type:i%2?'BUY':'SELL',status:i===0?'pending':i%3===0?'cancelled':'paused',amount:'100',available_amount:'75.123456',filled_amount:'24.876544',price:'95.5',min_limit:'500',max_limit:'5000',payment_methods:['sber','custom-bank'],user:{id:'1'},created_at:'2026-10-16T00:00:00Z'}));
+ const escrow={id:'b734e66f-4fc1-4b3b-82c8-aab020a89172',title:'Передача подписки',status:'DISPUTED',amount:'10.123456',currency:'USDT',buyer_id:2,seller_id:3,buyer_name:'Покупатель',seller_name:'Иван',created_at:'2026-10-16T00:00:00Z',unread_count:2};
+ await page.route('**/*',async route=>{
+  const url=new URL(route.request().url()),path=url.pathname;
+  if(route.request().isNavigationRequest()&&url.origin===new URL(base).origin)return route.continue();
+  if(!/^\/(api|admin|order|deal|support|payment-methods|wallets|referrals|exchange|processing|message)(\/|$)/.test(path))return route.continue();
+  let data=[];
+  if(route.request().method()!=='GET'){writes.push({path,method:route.request().method(),body:route.request().postDataJSON()});if(/^\/order\/\d+\/status$/.test(path)){const id=Number(path.split('/')[2]);orders=orders.map(o=>o.id===id?{...o,status:route.request().postDataJSON().status}:o);data={ok:true};}if(path==='/api/commerce/admin/escrow/policy'){feePercent=Number(route.request().postDataJSON().feePercent);data={feePercent};}}
+  if(path==='/api/market-app/session')data={token:null};
+  if(path==='/api/auth/me')data={id:1,username:'Покупатель',email,wallets:[]};
+  if(path==='/api/features'||path==='/admin/features')data={p2p:true,market:true,guarantor:true,nft:false,processing:false};
+  if(path==='/admin/login-ips')data={rows:[],total:0,unread:0};
+  if(path==='/order/my')data=orders;
+  if(path==='/deal/my-deals')data=[{id:501,status:'AWAITING_PAYMENT',buyer:{id:'1',username:'Покупатель'},seller:{id:2,username:'Иван'},order:{id:100,amount:'10',price:'95.5'},crypto_amount:'10',fiat_amount:'955',created_at:'2026-10-16T00:00:00Z'},{id:502,status:'COMPLETED',buyer:{id:2,username:'Иван'},seller:{id:1,username:'Продавец'},order:{id:101,amount:'5',price:'95'},crypto_amount:'5',fiat_amount:'475'}];
+  if(path.startsWith('/exchange/market/'))data={price:'83000',source:'Binance',change24h:1,candles:[{time:1000,close:'82000.123456'},{time:2000,close:'83000.654321'},{time:3000,close:'84000.987654'}],depth:{asks:[{price:'85000.12',quantity:'0.01'}],bids:[{price:'81000.34',quantity:'0.02'}]}};
+  if(path==='/exchange/state')data={wallets:[],orders:[],fills:[],positions:[],funding:{},book:{asks:[],bids:[]}};
+  if(path==='/api/commerce/admin/escrow'){searches.push(Object.fromEntries(url.searchParams));const include=!url.searchParams.get('q')||url.searchParams.get('q')==='Иван';data={rows:include?[escrow]:[],total:include?1:0,page:1,pageSize:25};}
+  if(path==='/api/commerce/admin/escrow/policy')data={feePercent,updatedAt:'2026-10-16T00:00:00Z',recentFees:[]};
+  if(path==='/api/commerce/escrow/policy')data={feePercent:5,updatedAt:'2026-10-16T00:00:00Z'};
+  if(path==='/api/commerce/me')data={user:{id:1},deals:[],listings:[],payments:[],history:[],held:{usdt:0,rub:0},availableUsdt:'0',rubBalance:'0'};
+  if(path==='/api/commerce/deals/'+escrow.id)data={deal:{...escrow,kind:'ESCROW',status:'DELIVERED',funded_at:'2026-10-16T00:00:00Z',terms:'Передать подписку согласно условиям'},messages:[{id:1,text:'Переписка по сделке',sender_name:'Иван',created_at:'2026-10-16T00:00:00Z'}],events:[]};
+  await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
+ });
+ const overflow=async()=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`${width} overflow`);
+ await page.goto(base+'/p2p/my-offers',{waitUntil:'domcontentloaded'});
+ await page.getByText('#100',{exact:true}).waitFor();assert.equal(await page.locator('main article').count(),20);await overflow();checks++;
+ await page.getByRole('button',{name:'Далее',exact:true}).click();assert.equal(await page.locator('main article').count(),3);checks++;
+ await page.getByRole('searchbox').fill('#100');await page.getByText('#100',{exact:true}).waitFor();assert.equal(await page.locator('main article').count(),1);
+ await page.getByRole('button',{name:'На паузу',exact:true}).click();await page.getByRole('button',{name:'Возобновить',exact:true}).waitFor();
+ await page.getByRole('combobox',{name:'Статус',exact:true}).selectOption('active');await page.getByText('По этим фильтрам ничего нет',{exact:true}).waitFor();
+ await page.getByRole('button',{name:'Сбросить фильтры',exact:true}).click();await page.getByText('#100',{exact:true}).waitFor();checks++;
+ if([390,1440].includes(width))await page.screenshot({path:`/tmp/goblin-offers-improved-${width}.png`});
+ await page.goto(base+'/p2p/my-deals',{waitUntil:'domcontentloaded'});await page.getByText('#501',{exact:true}).waitFor();assert.equal(await page.locator('main article').count(),1);
+ await page.getByRole('combobox',{name:'Статус',exact:true}).selectOption('all');await page.getByText('#502',{exact:true}).waitFor();
+ await page.getByRole('combobox',{name:'Моя роль',exact:true}).selectOption('SELL');assert.equal(await page.locator('main article').count(),1);await overflow();checks++;
+ await page.goto(base+'/trade',{waitUntil:'domcontentloaded'});const chart=page.getByRole('button',{name:/^График цены за 48 часов/});await chart.waitFor();
+ await chart.tap({position:{x:1,y:80}});assert.equal(await page.getByRole('textbox',{name:'Цена ордера',exact:true}).inputValue(),'82000.123456');
+ await chart.focus();await chart.press('End');await chart.press('Enter');assert.equal(await page.getByRole('textbox',{name:'Цена ордера',exact:true}).inputValue(),'84000.987654');
+ await page.getByRole('button',{name:/Выбрать цену покупки/}).tap();assert.equal(await page.getByRole('textbox',{name:'Цена ордера',exact:true}).inputValue(),'81000.34');
+ assert(!writes.some(w=>w.path.startsWith('/exchange')));await overflow();checks++;
+ await page.getByRole('button',{name:'Рынок',exact:true}).click();await chart.tap({position:{x:Math.max(1,(await chart.boundingBox()).width-1),y:80}});
+ assert.equal(await page.getByRole('textbox',{name:'Цена ордера',exact:true}).inputValue(),'84000.987654');checks++;
+ await page.goto(base+'/guarantor',{waitUntil:'domcontentloaded'});await page.getByText('Комиссия гаранта — 5%',{exact:true}).waitFor();await page.getByText(/удерживается из выплаты продавцу только после успешного завершения сделки/i).waitFor();await overflow();checks++;
+ await page.goto(base+'/admin?section=guarantor',{waitUntil:'domcontentloaded'});await page.getByRole('heading',{name:'Сделки гаранта'}).first().waitFor();await page.getByText('Передача подписки',{exact:true}).waitFor();assert(await page.getByText('Новых сообщений: 2',{exact:true}).count());assert(await page.getByText(/Сейчас: 5%/).count());await page.getByRole('spinbutton',{name:'Комиссия гаранта, %'}).fill('6.25');await page.getByRole('button',{name:'Сохранить комиссию'}).click();await page.getByText(/Сейчас: 6.25%/).waitFor();assert(writes.some(w=>w.method==='PATCH'&&w.path==='/api/commerce/admin/escrow/policy'&&w.body.feePercent==='6.25'));
+ const search=page.getByRole('searchbox',{name:'Поиск',exact:true});await search.fill('missing');await page.getByText('По этим условиям сделок нет.',{exact:true}).waitFor();
+ await search.fill('Иван');await page.getByText('Передача подписки',{exact:true}).waitFor();
+ for(const [label,status] of [['Ожидают','waiting'],['Действуют','active'],['Закрыты','closed'],['Новые сообщения','unread']]){await page.getByRole('button',{name:new RegExp(label)}).click();await page.waitForResponse(r=>r.url().includes('/api/commerce/admin/escrow')&&r.url().includes('status='+status));assert(searches.some(s=>s.status===status&&s.q==='Иван'));}await overflow();checks++;
+ await page.getByRole('link',{name:'Условия, участники и чат',exact:true}).click();await page.getByText('Передать подписку согласно условиям',{exact:true}).waitFor();await page.getByText('Переписка по сделке',{exact:true}).waitFor();await page.getByLabel('Причина решения администратора').fill('Тестовое решение администратора');await page.getByRole('button',{name:/Вернуть 10,123456 USDT покупателю/}).click();await page.getByRole('button',{name:'Подтвердить'}).count().catch(()=>0);await overflow();checks++;
+ assert(writes.some(w=>w.method==='POST'&&w.path===`/api/commerce/admin/deals/${escrow.id}/read`));
+ assert(writes.some(w=>w.method==='POST'&&w.path===`/api/commerce/admin/deals/${escrow.id}/action`&&w.body.action==='resolve-refund'&&w.body.note==='Тестовое решение администратора'));
+ assert(writes.filter(w=>w.method==='PATCH'&&w.path.startsWith('/order/')).every(w=>w.path==='/order/100/status'));
+ assert.deepEqual(errors,[]);console.log(`PASS usability ${width}px`);await context.close();
+}console.log(`PASS ${checks} populated-list, pagination, filter, tap/keyboard price and guarantor admin checks. All writes mocked.`);}finally{await browser.close();}

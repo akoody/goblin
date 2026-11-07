@@ -1,0 +1,101 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import {chromium} from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+
+const email=(fs.readFileSync('.env','utf8').match(/^VITE_ADMIN_EMAILS=(.*)$/m)?.[1]||'').replace(/^['"]|['"]$/g,'').split(/[,;\n]/)[0].trim();
+const base=process.env.POLISH_UI_BASE||'http://127.0.0.1:5187';
+const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const now=new Date().toISOString();
+try {
+  for(const width of [320,390,768,1440]){
+    console.log(`Checking ${width}px`);
+    const context=await browser.newContext({viewport:{width,height:900}});
+    await context.addInitScript(()=>localStorage.setItem('token','interface-qa-only'));
+    const page=await context.newPage(),errors=[],writes=[],queries=[];
+    let accept=false,dialogs=0;
+    let qaUser={id:1,email,username:'QA buyer',status:'active',walletBalances:{USDT:'10',SOL:'1'},createdAt:now,marketAccountsEnabled:true,marketServicesEnabled:true};
+    page.on('pageerror',e=>errors.push(e.message));
+    page.on('dialog',async d=>{dialogs++;await(accept?d.accept():d.dismiss());});
+    const messages=Array.from({length:35},(_,i)=>({id:i+1,sender_id:i%2?1:2,sender:{id:i%2?1:2,username:i%2?'QA buyer':'QA seller',role:'user'},created_at:now,text:`Сообщение ${i+1}: `+'Проверка переписки. '.repeat(6)}));
+    await page.route('**/*',async route=>{
+      const req=route.request(),url=new URL(req.url()),p=url.pathname;
+      if(!/^\/(api|admin|support|payment-methods|referrals|wallets|deal|order|exchange)\//.test(p))return route.continue();
+      let data=[];
+      if(req.method()!=='GET')writes.push({path:p,body:req.postDataJSON()});
+      if(p==='/api/auth/me')data={id:1,email,username:'QA buyer',wallets:[],staffAccess:{role:'admin'}};
+      if(p==='/admin/access')data={role:'admin',permissions:[]};
+      if(p==='/api/features'||p==='/admin/features')data={p2p:true,processing:true,nft:true,market:true,guarantor:true};
+      if(p==='/api/market-app/session')data={token:null};
+      if(p==='/admin/login-ips')data={rows:[],unread:0};
+      if(p==='/admin/users')data=[qaUser];
+      if(p==='/admin/users/1/controls'){qaUser={...qaUser,...req.postDataJSON()};data=qaUser;}
+      if(p==='/admin/wallet-users/1/balances')data={at:now,wallets:[{currency:'SOL',total:'1.123456789',available:'1.1',locked:'0.023456789'}],tokens:[]};
+      if(p==='/api/auth/me/stats')data={total:10,completed:7,cancelled:1,recent:3,successRate:87.5};
+      if(p==='/admin/transaction-history'||p==='/api/transactions/statement'){
+        queries.push(url.searchParams.toString());
+        data={rows:[{id:'native-qa',createdAt:now,amount:'0.000000000000000001',currency:'ETH',direction:'OUT',status:'PENDING',senderAddress:'0x'+'a'.repeat(40),receiverAddress:'0x'+'b'.repeat(40),txHash:'0x'+'c'.repeat(64)}],total:1,page:1,pageSize:50};
+      }
+      if(p==='/api/content/admin/news')data=req.method()==='GET'?[]:{success:true};
+      if(p==='/api/content/about')data={body:'Описание проекта',links:[]};
+      if(p==='/api/content/news')data=[{id:1,title:'Новость QA',body:'Текст новости',created_at:now,media:[{id:'qa-audio',name:'secret-original-filename.mp3',mime:'audio/mpeg',url:'/api/content/media/qa-audio'}]}];
+      if(p==='/api/commerce/me')data={user:{id:1},isAdmin:true};
+      if(p==='/api/commerce/deals/qa-deal')data={deal:{id:'qa-deal',title:'Тестовая сделка',terms:'Тестовые условия',amount:'5',currency:'USDT',kind:'ESCROW',status:'FUNDED',buyer_id:1,seller_id:2,guarantor_fee_percent:'5'},messages,events:[],canJoin:false};
+      if(p==='/api/commerce/deals/qa-deal/messages'&&req.method()==='POST')messages.push({id:100,sender_id:1,sender:{id:1,username:'QA buyer',role:'user'},created_at:now,text:req.postDataJSON().text});
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(data)});
+    });
+    const noOverflow=async()=>assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth+1),false,`page overflow at ${width}: ${page.url()}`);
+    await page.goto(base+'/admin');
+    await page.getByRole('button',{name:'Транзакции',exact:true}).click();
+    await page.getByRole('heading',{name:'Транзакции биржи'}).waitFor();
+    await page.getByLabel('Направление',{exact:true}).selectOption('OUT');
+    await page.getByLabel('С даты',{exact:true}).fill('2026-11-01');
+    await page.getByLabel('Сумма от',{exact:true}).fill('0.000000000000000001');
+    await page.getByLabel('Адрес, email, хеш или ID',{exact:true}).fill('0xbb');
+    await page.waitForResponse(r=>r.url().includes('/transaction-history?')&&r.url().includes('address=0xbb'));
+    assert(queries.at(-1).includes('direction=OUT'));assert(queries.at(-1).includes('from='));
+    assert.equal(await page.locator('table tbody tr td').count(),6);await noOverflow();
+    await page.getByRole('button',{name:'Пользователи',exact:true}).click();
+    await page.getByRole('button',{name:'Показать балансы'}).click();
+    await page.getByText('1,123456789',{exact:true}).waitFor();
+    await page.getByLabel('Маркет: аккаунты',{exact:true}).click();
+    assert(await page.getByLabel('Маркет: аккаунты',{exact:true}).isChecked());
+    assert(!writes.some(w=>w.path.includes('/controls')),'Canceled control must not save');
+    accept=true;
+    await page.getByLabel('Маркет: услуги',{exact:true}).click();
+    await page.getByText('Настройки аккаунта обновлены',{exact:true}).waitFor();
+    assert.equal(await page.getByLabel('Маркет: услуги',{exact:true}).isChecked(),false);
+    assert.deepEqual(writes.find(w=>w.path.includes('/controls')).body,{marketServicesEnabled:false});
+    accept=false;
+    await noOverflow();
+    await page.getByRole('button',{name:'Новости и о проекте',exact:true}).click();
+    await page.getByLabel('Заголовок',{exact:true}).fill('Тестовая новость');
+    await page.getByLabel('Текст',{exact:true}).fill('Текст тестовой новости');
+    await page.getByRole('button',{name:'Сохранить новость',exact:true}).click();
+    assert(!writes.some(w=>w.path==='/api/content/admin/news'),'Canceled save must not submit');
+    accept=true;await page.getByRole('button',{name:'Сохранить новость',exact:true}).click();
+    await page.getByText('Сохранено',{exact:true}).waitFor();assert.equal(writes.filter(w=>w.path==='/api/content/admin/news').length,1);accept=false;
+    await noOverflow();
+    await page.goto(base+'/news');await page.getByRole('heading',{name:'Новость QA',exact:true}).waitFor();assert.equal(await page.locator('figcaption').count(),0);assert(!(await page.locator('body').innerText()).includes('secret-original-filename'));await noOverflow();
+    await page.goto(base+'/me?section=statistics');await page.getByText('87.5%',{exact:true}).waitFor();await noOverflow();
+    await page.goto(base+'/me?section=transactions');await page.getByRole('heading',{name:'История транзакций',exact:true}).waitFor();await page.getByText('0,000000000000000001 ETH',{exact:true}).waitFor();await noOverflow();
+    const menu=page.getByRole('navigation',{name:'Разделы кошелька и профиля'});
+    if(width<=768)await menu.getByRole('button',{name:/История транзакций/}).first().click();
+    const logoutDialog=page.waitForEvent('dialog');
+    await menu.getByRole('button',{name:'Выйти',exact:true}).click();
+    await logoutDialog;
+    assert.equal(await page.evaluate(()=>localStorage.getItem('token')),'interface-qa-only');
+    assert(!writes.some(w=>w.path==='/api/market-app/logout'));
+    await page.goto(base+'/commerce/deals/qa-deal');
+    const log=page.getByRole('log',{name:'Сообщения сделки'});await log.getByText(/Сообщение 35:/).waitFor();
+    assert(await log.evaluate(n=>n.scrollTop>0),'Chat opens at latest message');
+    await log.evaluate(n=>{n.scrollTop=0;n.dispatchEvent(new Event('scroll',{bubbles:true}));});
+    await page.waitForTimeout(100);assert.equal(await log.evaluate(n=>n.scrollTop),0);
+    await page.getByRole('textbox',{name:'Сообщение',exact:true}).fill('Сообщение из теста');
+    await page.getByRole('textbox',{name:'Сообщение',exact:true}).press('Control+Enter');
+    await log.getByText('Сообщение из теста',{exact:true}).waitFor();assert(await log.evaluate(n=>n.scrollTop>0));
+    await noOverflow();assert(dialogs>=4);assert.equal(errors.length,0,errors.join('\n'));
+    if([390,1440].includes(width))await page.screenshot({path:`/tmp/goblin-polish-chat-${width}.png`});
+    await context.close();
+  }
+  console.log('PASS: history filters/table, balances, canceled and confirmed saves, logout cancel, news captions, statistics and escrow chat at 320/390/768/1440px (mocked API)');
+} finally {await browser.close();}
