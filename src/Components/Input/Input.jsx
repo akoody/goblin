@@ -13,11 +13,16 @@ export const Input = ({
   pattern,
   title,
   required = true,
+  inputMode,
+  autoComplete,
+  className,
 }) => {
   return (
     <label className={styles.inputLabel}>
+      <span className={styles.placeholder}>{placeholder}</span>
       <input
         required={required}
+        inputMode={inputMode}
         type={type || "text"}
         readOnly={readonly}
         value={value}
@@ -26,9 +31,10 @@ export const Input = ({
         maxLength={maxLength}
         pattern={pattern}
         title={title}
+        autoComplete={autoComplete}
+        className={className}
         onChange={(e) => onChange(e.target.value)}
       />
-      <div className={styles.placeholder}>{placeholder}</div>
     </label>
   );
 };

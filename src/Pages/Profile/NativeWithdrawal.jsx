@@ -1,0 +1,13 @@
+import {useEffect,useRef,useState} from 'react';
+import api from '../../api';
+import {assetDecimal} from './walletAmounts.mjs';
+import styles from '../Content/Content.module.scss';
+export function NativeWithdrawal({currency}){
+ const [address,setAddress]=useState(''),[amount,setAmount]=useState(''),[quote,setQuote]=useState(null),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
+ const key=useRef(null);
+ useEffect(()=>{setAddress('');setAmount('');setQuote(null);setError('');setNotice('');key.current=null;},[currency]);
+ function invalidate(){setQuote(null);key.current=null;setNotice('');}
+ async function calculate(e){e.preventDefault();setBusy(true);setError('');try{key.current=crypto.randomUUID();const r=await api.post('/api/transactions/native/quote',{currency,address,amount,requestKey:key.current});setQuote(r.data);}catch(e){setError(e.response?.data?.message||'Не удалось рассчитать вывод');}finally{setBusy(false);}}
+ async function confirm(){setBusy(true);setError('');try{const r=await api.post(`/api/transactions/native/${quote.id}/execute`);setQuote(null);setNotice(`Операция ${r.data.id} подписана и ожидает подтверждения ${currency==='BTC'?'Bitcoin':'Ethereum'}. Не отправляйте её повторно.`);key.current=null;}catch(e){setError(e.response?.data?.message||'Не удалось подтвердить. Проверьте историю операции перед повтором.');}finally{setBusy(false);}}
+ return <section><h3>Вывод {currency}</h3><p>Комиссия биржи и расходы сети показываются до подтверждения. При неудачной операции комиссия биржи не взимается; уже потраченная комиссия сети не возвращается.</p>{error&&<p role="alert">{error}</p>}{notice&&<p role="status">{notice}</p>}<form className={styles.form} onSubmit={calculate}><label>Внешний адрес {currency}<input required autoComplete="off" value={address} disabled={busy} onChange={e=>{invalidate();setAddress(e.target.value);}}/></label><label>Сумма получателю, {currency}<input required inputMode="decimal" type="text" value={amount} disabled={busy} onChange={e=>{invalidate();setAmount(e.target.value.replace(',','.'));}}/></label><button disabled={busy}>{busy?'Проверяем…':'Рассчитать вывод'}</button></form>{quote&&<section className={styles.article}><p>Получатель: {assetDecimal(quote.amount)} {currency}</p><p>Комиссия биржи: {assetDecimal(quote.serviceFee)} {currency}</p><p>Комиссия сети: {assetDecimal(quote.networkFee)} {currency}</p><p><strong>Всего спишется: {assetDecimal(quote.total)} {currency}</strong></p><p>Расчёт действует 60 секунд. До подтверждения деньги не отправляются.</p><button type="button" disabled={busy||Date.now()>new Date(quote.expiresAt).getTime()} onClick={confirm}>Подтвердить вывод {currency}</button></section>}</section>;
+}

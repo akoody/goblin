@@ -1,4 +1,5 @@
 .offers {
+  width: 100%; max-width: 1440px; margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 18px;
@@ -30,11 +31,11 @@
       min-height: 42px;
       padding: 0 16px;
       color: #fff;
-      background: var(--green-gradient);
+      background: var(--primary-deep);
       border-radius: var(--radius-sm);
-      box-shadow: var(--button-shadow);
+      box-shadow: none;
       font-size: 14px;
-      font-weight: 850;
+      font-weight: 600;
       white-space: nowrap;
     }
   }
@@ -45,8 +46,8 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   &_toolbar {
@@ -62,7 +63,7 @@
       padding: 4px;
       background: var(--surface-muted);
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 6px;
     }
 
     button {
@@ -73,9 +74,9 @@
       min-height: 38px;
       padding: 0 14px;
       color: var(--text-muted);
-      border-radius: 999px;
+      border-radius: 6px;
       font-size: 13px;
-      font-weight: 850;
+      font-weight: 600;
     }
 
     > button {
@@ -89,7 +90,7 @@
   &_filterActive {
     color: var(--primary-deep) !important;
     background: #fff;
-    box-shadow: 0 8px 18px rgba(32, 40, 32, 0.08);
+    box-shadow: none;
   }
 
   &_stats {
@@ -110,13 +111,13 @@
     span {
       color: var(--text-muted);
       font-size: 12px;
-      font-weight: 800;
+      font-weight: 600;
     }
 
     strong {
       color: var(--text-dark);
       font-size: 26px;
-      font-weight: 900;
+      font-weight: 600;
     }
   }
 
@@ -144,8 +145,8 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm) var(--radius-sm) 0 0;
     font-size: 11px;
-    font-weight: 900;
-    text-transform: uppercase;
+    font-weight: 600;
+    text-transform: none;
   }
 
   &_row {
@@ -166,7 +167,7 @@
     b {
       color: var(--primary-deep);
       font-size: 13px;
-      font-weight: 900;
+      font-weight: 600;
       text-align: right;
     }
   }
@@ -178,9 +179,9 @@
     width: fit-content;
     margin-top: 5px;
     padding: 4px 7px;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 10px;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   &_status_pending {
@@ -213,7 +214,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-size: 11px;
-      font-weight: 900;
+      font-weight: 600;
       text-decoration: none;
 
       &:disabled {
@@ -233,9 +234,9 @@
   &_side_sell {
     width: fit-content;
     padding: 6px 9px;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   &_side_buy {
@@ -262,11 +263,11 @@
       padding: 0 7px;
       background: #fff;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 6px;
       color: var(--text-dark);
       font-size: 11px;
       font-style: normal;
-      font-weight: 900;
+      font-weight: 600;
     }
 
     em {
@@ -289,7 +290,7 @@
     h2 {
       color: var(--text-dark);
       font-size: 20px;
-      font-weight: 900;
+      font-weight: 600;
     }
 
     p {

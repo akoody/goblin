@@ -28,6 +28,7 @@ export const Order = () => {
   const [inputValue, setInputValue] = useState("");
   const [selectedPayment, setSelectedPayment] = useState(p2pPaymentMethods[0]);
   const [paymentsOpen, setPaymentsOpen] = useState(false);
+  const [p2pFeePercent, setP2pFeePercent] = useState(5);
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -46,6 +47,9 @@ export const Order = () => {
         });
       })
       .finally(() => setLoading(false));
+    api.get('/deal/fee-policy')
+      .then(response => setP2pFeePercent(Number(response.data?.feePercent ?? 5)))
+      .catch(() => {});
   }, [id]);
 
   useEffect(() => {
@@ -101,6 +105,8 @@ export const Order = () => {
   const orderPayments = orderPaymentIds.map(getPaymentMethodById);
   const cryptoAmount = mode === "fiat" ? Number(inputValue || 0) / price : Number(inputValue || 0);
   const fiatAmount = mode === "fiat" ? Number(inputValue || 0) : Number(inputValue || 0) * price;
+  const estimatedFee = Math.round(cryptoAmount * p2pFeePercent / 100 * 1_000_000) / 1_000_000;
+  const estimatedBuyerNet = Math.max(cryptoAmount - estimatedFee, 0);
   const canCreateDeal =
     !isOwnOrder &&
     cryptoAmount > 0 &&
@@ -155,6 +161,9 @@ export const Order = () => {
           {mode === "fiat" ? "Я получу" : "К оплате"}:{" "}
           <strong>{mode === "fiat" ? formatMoney(cryptoAmount, "USDT") : formatMoney(fiatAmount)}</strong>
         </p>
+        {p2pFeePercent > 0 && cryptoAmount > 0 && <p className={styles.order_receive}>
+          Комиссия P2P {p2pFeePercent}%: {formatMoney(estimatedFee, "USDT")} · покупатель получит {formatMoney(estimatedBuyerNet, "USDT")} после удержания
+        </p>}
         <p className={styles.order_receive}>
           Лимиты: <strong>{formatMoney(minFiat)} - {formatMoney(maxFiat)}</strong>
         </p>

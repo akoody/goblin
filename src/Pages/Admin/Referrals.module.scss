@@ -1,0 +1,31 @@
+.referrals {
+  width: 100%; max-width: 1440px; margin-inline: auto;
+  padding: 20px;
+  min-width: 0;
+  background: #fff;
+  border: 1px solid #dfe3d9;
+  border-radius: 8px;
+  h2, h3 { margin: 0 0 16px; }
+  p { margin: 12px 0; line-height: 1.5; }
+  button, input { font: inherit; border: 1px solid #cdd5c6; border-radius: 6px; padding: 8px 12px; }
+  button { background: #f4f7f0; cursor: pointer; white-space: normal; }
+  button:disabled { opacity: .55; cursor: default; }
+  a { color: #27621a; }
+  section { margin-top: 24px; }
+}
+.toolbar { display: flex; align-items: end; gap: 12px; flex-wrap: wrap;
+  label { display: grid; gap: 8px; flex: 1; min-width: 160px; }
+  input { width: 100%; box-sizing: border-box; min-width: 0; }
+}
+.table { max-width: 100%; overflow-x: auto; margin-top: 16px;
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align: left; padding: 12px; border-bottom: 1px solid #e1e5dd; vertical-align: top; min-width: 125px; }
+  td { overflow-wrap: anywhere; }
+  td button { display: block; margin-top: 8px; }
+}
+.amounts { display: grid; gap: 16px;
+  > div { display: grid; gap: 4px; min-width: 200px; }
+}
+.pages { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.link { overflow-wrap: anywhere; user-select: all; }
+@media (max-width: 480px) { .referrals { padding: 12px; } }

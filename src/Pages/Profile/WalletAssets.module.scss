@@ -1,0 +1,13 @@
+.wallet {display:grid;gap:24px;min-width:0;h2{font-size:24px;margin:0;}h3{margin:0;}p{margin:0;line-height:1.6;}}
+.heading {display:flex;align-items:start;justify-content:space-between;flex-wrap:wrap;gap:16px;>div{display:grid;gap:8px;}p{color:var(--text-muted);}a{color:var(--primary-deep);}}
+.toolbar {display:grid;gap:16px;label{display:grid;gap:8px;font-size:14px;}input{width:100%;box-sizing:border-box;padding:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#fff);font:inherit;}}
+.filters {display:flex;flex-wrap:wrap;gap:8px 20px;border-bottom:1px solid var(--border);button{padding:10px 0;background:none;border:0;border-bottom:2px solid transparent;font:inherit;color:var(--text-muted);}button[aria-pressed="true"]{border-bottom-color:var(--primary-deep);color:var(--primary-deep);}}
+.assets {display:grid;min-width:0;}
+.asset {display:grid;grid-template-columns:minmax(140px,1fr) minmax(0,2fr) auto;gap:20px;align-items:start;padding:24px 0;border-bottom:1px solid var(--border);min-width:0;}
+.identity {display:grid;gap:6px;min-width:0;overflow-wrap:anywhere;strong{font-size:18px;}span{font-size:14px;color:var(--text-muted);}}
+.amounts {display:flex;flex-wrap:wrap;gap:16px 24px;margin:0;min-width:0;>div{min-width:0;max-width:100%;display:grid;gap:6px;}dt{color:var(--text-muted);font-size:13px;}dd{margin:0;font-size:16px;font-weight:600;font-variant-numeric:tabular-nums;overflow-wrap:anywhere;}}
+.open {padding:10px 12px;border:1px solid var(--border);border-radius:6px;background:var(--surface,#fff);font:inherit;min-height:44px;color:var(--primary-deep);}
+.tokenDetails {grid-column:1/-1;display:grid;gap:8px;min-width:0;font-size:13px;color:var(--text-muted);code{overflow-wrap:anywhere;white-space:normal;}a{color:var(--primary-deep);}}
+.address {display:block;white-space:normal;overflow-wrap:anywhere;min-width:0;padding:14px;border:1px solid var(--border);border-radius:6px;}
+.links {display:flex;flex-wrap:wrap;gap:16px;color:var(--primary-deep);}
+@media(max-width:900px){.asset{grid-template-columns:minmax(0,1fr) auto;gap:16px;padding:20px 0;}.identity{grid-column:1;}.asset>.amounts{grid-column:1/-1;}.open{grid-column:2;grid-row:1;justify-self:end;}.wallet h2{font-size:22px;}.amounts{gap:16px 24px;}}

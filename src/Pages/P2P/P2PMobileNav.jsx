@@ -4,9 +4,9 @@ import styles from "./P2PMobileNav.module.scss";
 
 const items = [
   { to: "/p2p/orders", label: "P2P", icon: <FiCreditCard /> },
-  { to: "/p2p/my-deals", label: "Orders", icon: <FiFileText /> },
-  { to: "/p2p/my-offers", label: "Ads", icon: <FiMessageSquare /> },
-  { to: "/p2p/profile", label: "Profile", icon: <FiUser /> },
+  { to: "/p2p/my-deals", label: "Сделки", icon: <FiFileText /> },
+  { to: "/p2p/my-offers", label: "Объявления", icon: <FiMessageSquare /> },
+  { to: "/p2p/profile", label: "Профиль", icon: <FiUser /> },
 ];
 
 export const P2PMobileNav = () => {

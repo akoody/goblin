@@ -1,4 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { DepositCompliance } from './DepositCompliance';
+import { Helpers } from './Helpers';
+import {UserBalances} from './UserBalances';
+import {ContentAdmin} from '../Content/Content';
+import {Bonuses} from '../Content/Bonuses';
+import {TransactionHistory} from '../../Components/TransactionHistory/TransactionHistory';
+import {ScrollableNav} from '../../Components/ScrollableNav/ScrollableNav';
+import {confirmSaveClick,confirmSaveSubmit} from '../../Components/AdminSaveConfirmation';
+import {WalletHelp} from './WalletHelp';
+import {TreasuryCollection} from './TreasuryCollection';
+import {NativeChains} from './NativeChains';
+import {PumpAdmin} from '../Content/CreateCoin';
+
+import { Referrals } from './Referrals';
+import { GuarantorDeals } from './GuarantorDeals';
+import { P2pFeePolicy } from './P2PFeePolicy';
 import {
   FiAlertCircle,
   FiActivity,
@@ -97,6 +113,32 @@ const formatDate = (value) => {
 
 const formatTradingAmount = (value, digits = 8) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: digits }).format(Number(value || 0));
+const walletPrecisions = { BTC: 8, ETH: 18, USDT: 6, TRX: 6, SOL: 9 };
+const formatWalletBalance = (value, currency) => formatTradingAmount(value, walletPrecisions[currency] || 8);
+
+const AdminMarketChart = ({ candles = [] }) => {
+  const path = useMemo(() => {
+    if (candles.length < 2) return "";
+    const prices = candles.map((candle) => Number(candle.close || 0));
+    const min = Math.min(...prices);
+    const range = Math.max(...prices) - min || 1;
+    return prices.map((price, index) => {
+      const x = (index / (prices.length - 1)) * 640;
+      const y = 158 - ((price - min) / range) * 132;
+      return `${index ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`;
+    }).join(" ");
+  }, [candles]);
+
+  return (
+    <div className={styles.admin_exchangeChart}>
+      <h4>График {candles.length ? "· 48 часов" : ""}</h4>
+      {path ? <svg viewBox="0 0 640 180" preserveAspectRatio="none" role="img" aria-label="График биржевой цены за 48 часов">
+        {[40, 80, 120, 160].map((y) => <line key={y} x1="0" y1={y} x2="640" y2={y} />)}
+        <path d={path} />
+      </svg> : <p>График временно недоступен</p>}
+    </div>
+  );
+};
 
 const processingCurrencySymbols = {
   USD: "$",
@@ -178,6 +220,13 @@ const emptyProcessingTransactionDraft = {
   payerName: "",
   payerAccount: "",
   comment: "",
+};
+
+const emptyP2pDealDraft = {
+  orderId: "",
+  counterpartyUserId: "",
+  cryptoAmount: "",
+  paymentMethod: "",
 };
 
 const emptyPaymentDefinition = {
@@ -275,7 +324,46 @@ const emptyPaymentField = () => ({
 });
 
 export const Admin = () => {
-  const [activeSection, setActiveSection] = useState("support");
+  const [activeSection, setActiveSection] = useState(() => new URLSearchParams(window.location.search).get('section') === 'guarantor' ? 'guarantor' : 'support');
+  const [loginIps, setLoginIps] = useState({ rows: [], unread: 0 });
+  const [loginIpsError, setLoginIpsError] = useState("");
+  const [loginIpQuery,setLoginIpQuery]=useState('');
+  const [loginIpsLoading,setLoginIpsLoading]=useState(false);
+  const loginIpQueryRef=useRef('');
+  const loginIpRequest=useRef(0);
+  const loadLoginIps = async () => {
+    const query=loginIpQueryRef.current,request=++loginIpRequest.current;
+    setLoginIpsLoading(true);
+    try {
+      const { data } = await api.get("/admin/login-ips",{params:{q:query}});
+      if(request!==loginIpRequest.current||query!==loginIpQueryRef.current)return;
+      setLoginIps(data);
+      setLoginIpsError("");
+    } catch {
+      if(request!==loginIpRequest.current||query!==loginIpQueryRef.current)return;
+      setLoginIpsError("Не удалось загрузить историю входов");
+    } finally {
+      if(request===loginIpRequest.current)setLoginIpsLoading(false);
+    }
+  };
+  useEffect(() => {
+    loadLoginIps();
+    const timer = window.setInterval(loadLoginIps, 15000);
+    return () => window.clearInterval(timer);
+  }, []);
+  useEffect(()=>{
+    loginIpQueryRef.current=loginIpQuery;
+    const timer=window.setTimeout(loadLoginIps,300);
+    return ()=>window.clearTimeout(timer);
+  },[loginIpQuery]);
+  const reviewLoginIp = async (id) => {
+    try {
+      await api.patch(`/admin/login-ips/${id}/review`);
+      await loadLoginIps();
+    } catch {
+      enqueueSnackbar("Не удалось отметить уведомление", { variant: "error" });
+    }
+  };
   const [tickets, setTickets] = useState([]);
   const [ticketMessages, setTicketMessages] = useState([]);
   const [selectedTicketId, setSelectedTicketId] = useState(null);
@@ -301,10 +389,10 @@ export const Admin = () => {
   const [editingPaymentCode, setEditingPaymentCode] = useState(null);
   const [adminUsers, setAdminUsers] = useState([]);
   const [adminUsersLoading, setAdminUsersLoading] = useState(false);
+  const pendingUserControls = useRef(new Set());
+  const [savingUserControls, setSavingUserControls] = useState([]);
   const [adminUserSearch, setAdminUserSearch] = useState("");
-  const [adminTransactions, setAdminTransactions] = useState([]);
-  const [adminTransactionsLoading, setAdminTransactionsLoading] = useState(false);
-  const [adminTransactionFilter, setAdminTransactionFilter] = useState("all");
+
   const [tradingView, setTradingView] = useState("fills");
   const [tradingMarket, setTradingMarket] = useState("");
   const [tradingSymbol, setTradingSymbol] = useState("");
@@ -313,6 +401,9 @@ export const Admin = () => {
   const [tradingPage, setTradingPage] = useState(0);
   const [tradingData, setTradingData] = useState({ items: [], total: 0, summary: {} });
   const [tradingLoading, setTradingLoading] = useState(false);
+  const [marketPair, setMarketPair] = useState("BTC-USDT");
+  const [marketSnapshot, setMarketSnapshot] = useState(null);
+  const [marketLoading, setMarketLoading] = useState(false);
   const [processingDeals, setProcessingDeals] = useState([]);
   const [processingSummary, setProcessingSummary] = useState({});
   const [processingTotal, setProcessingTotal] = useState(0);
@@ -328,6 +419,11 @@ export const Admin = () => {
   const [processingRequisiteDraft, setProcessingRequisiteDraft] = useState(emptyProcessingRequisiteDraft);
   const [processingTransactionDraft, setProcessingTransactionDraft] = useState(emptyProcessingTransactionDraft);
   const [processingSaving, setProcessingSaving] = useState(false);
+  const [platformFeatures, setPlatformFeatures] = useState({ p2p: true, processing: true, nft: true, market:true,guarantor:true });
+  const [platformFeaturesLoading, setPlatformFeaturesLoading] = useState(false);
+  const [platformFeatureSaving,setPlatformFeatureSaving]=useState(null);
+  const [p2pDealDraft, setP2pDealDraft] = useState(emptyP2pDealDraft);
+  const [p2pDealSaving, setP2pDealSaving] = useState(false);
   const [registrations, setRegistrations] = useState([]);
   const [ticketsLoading, setTicketsLoading] = useState(true);
   const [messagesLoading, setMessagesLoading] = useState(false);
@@ -443,29 +539,59 @@ export const Admin = () => {
       .finally(() => setAdminUsersLoading(false));
   };
 
-  const loadAdminTransactions = (silent = false) => {
-    if (!silent) {
-      setAdminTransactionsLoading(true);
-    }
 
-    api
-      .get("/admin/transactions")
-      .then((response) => setAdminTransactions(Array.isArray(response.data) ? response.data : []))
-      .catch((error) => {
-        if (!silent) {
-          enqueueSnackbar(getApiErrorMessage(error, "Не удалось загрузить транзакции"), {
-            variant: "error",
-          });
-        }
-      })
-      .finally(() => setAdminTransactionsLoading(false));
-  };
 
   const loadRegistrations = () => {
     api
       .get("/admin/registrations")
       .then((response) => setRegistrations(Array.isArray(response.data) ? response.data : []))
       .catch(() => setRegistrations([]));
+  };
+
+  const loadPlatformFeatures = (silent = false) => {
+    if (!silent) setPlatformFeaturesLoading(true);
+    api.get("/admin/features")
+      .then((response) => setPlatformFeatures(response.data || {}))
+      .catch((error) => {
+        if (!silent) enqueueSnackbar(getApiErrorMessage(error, "Не удалось загрузить доступность разделов"), { variant: "error" });
+      })
+      .finally(() => setPlatformFeaturesLoading(false));
+  };
+
+  const handlePlatformFeatureChange = (feature, enabled) => {
+    if(platformFeatureSaving)return;
+    setPlatformFeatureSaving(feature);
+    api.patch(`/admin/features/${feature}`, { enabled })
+      .then((response) => {
+        setPlatformFeatures(response.data || {});
+        enqueueSnackbar(enabled ? "Раздел включен" : "Раздел переведен на обновление", { variant: "success" });
+      })
+      .catch((error) => enqueueSnackbar(getApiErrorMessage(error, "Не удалось обновить раздел"), { variant: "error" }))
+      .finally(()=>setPlatformFeatureSaving(null));
+  };
+
+  const handleCreateP2pDeal = (event) => {
+    event.preventDefault();
+    if (p2pDealSaving) return;
+    const payload = {
+      orderId: Number(p2pDealDraft.orderId),
+      counterpartyUserId: Number(p2pDealDraft.counterpartyUserId),
+      cryptoAmount: Number(p2pDealDraft.cryptoAmount),
+      paymentMethod: p2pDealDraft.paymentMethod,
+    };
+    if (!Number.isInteger(payload.orderId) || !Number.isInteger(payload.counterpartyUserId) || payload.cryptoAmount <= 0) {
+      enqueueSnackbar("Укажите ID ордера, ID контрагента и сумму USDT", { variant: "warning" });
+      return;
+    }
+    setP2pDealSaving(true);
+    api.post("/admin/deals", payload)
+      .then(() => {
+        setP2pDealDraft(emptyP2pDealDraft);
+        loadDeals();
+        enqueueSnackbar("P2P-сделка создана и USDT помещены в эскроу", { variant: "success" });
+      })
+      .catch((error) => enqueueSnackbar(getApiErrorMessage(error, "Не удалось создать P2P-сделку"), { variant: "error" }))
+      .finally(() => setP2pDealSaving(false));
   };
 
   const loadTrading = (silent = false) => {
@@ -499,6 +625,16 @@ export const Admin = () => {
       .finally(() => {
         if (tradingRequestRef.current === requestId) setTradingLoading(false);
       });
+  };
+
+  const loadExchangeMarket = (silent = false) => {
+    if (!silent) setMarketLoading(true);
+    api.get(`/exchange/market/${marketPair}`)
+      .then((response) => setMarketSnapshot(response.data || null))
+      .catch((error) => {
+        if (!silent) enqueueSnackbar(getApiErrorMessage(error, "Не удалось загрузить биржевой стакан"), { variant: "error" });
+      })
+      .finally(() => setMarketLoading(false));
   };
 
   const loadProcessing = (silent = false) => {
@@ -563,8 +699,9 @@ export const Admin = () => {
     loadDeals();
     loadPaymentDefinitions();
     loadAdminUsers(true);
-    loadAdminTransactions(true);
+
     loadRegistrations();
+    loadPlatformFeatures(true);
   }, []);
 
   useEffect(() => {
@@ -572,6 +709,13 @@ export const Admin = () => {
     const timer = window.setTimeout(() => loadTrading(), 300);
     return () => window.clearTimeout(timer);
   }, [activeSection, tradingView, tradingMarket, tradingSymbol, tradingStatus, tradingSearch, tradingPage]);
+
+  useEffect(() => {
+    if (activeSection !== "trading") return undefined;
+    loadExchangeMarket();
+    const timer = window.setInterval(() => loadExchangeMarket(true), 7000);
+    return () => window.clearInterval(timer);
+  }, [activeSection, marketPair]);
 
   useEffect(() => {
     if (activeSection !== "processing") return undefined;
@@ -699,13 +843,7 @@ export const Admin = () => {
     });
   }, [dealSearchValue, dealStatusFilter, deals]);
 
-  const filteredAdminTransactions = useMemo(() => {
-    if (adminTransactionFilter === "all") {
-      return adminTransactions;
-    }
 
-    return adminTransactions.filter((transaction) => transaction.source === adminTransactionFilter);
-  }, [adminTransactionFilter, adminTransactions]);
 
   const handleSendReply = () => {
     const trimmedReply = replyText.trim();
@@ -957,7 +1095,11 @@ export const Admin = () => {
   };
 
   const handleUpdateUserControls = (user, patch) => {
-    const payload = { ...user, ...patch };
+    if (pendingUserControls.current.has(user.id)) return;
+    if (!window.confirm(`Изменить доступ для ${user.email}?`)) return;
+    pendingUserControls.current.add(user.id);
+    setSavingUserControls([...pendingUserControls.current]);
+    const payload = patch;
 
     api
       .patch(`/admin/users/${user.id}/controls`, payload)
@@ -971,6 +1113,10 @@ export const Admin = () => {
         enqueueSnackbar(getApiErrorMessage(error, "Не удалось обновить аккаунт"), {
           variant: "error",
         });
+      })
+      .finally(() => {
+        pendingUserControls.current.delete(user.id);
+        setSavingUserControls([...pendingUserControls.current]);
       });
   };
 
@@ -1124,19 +1270,28 @@ export const Admin = () => {
   };
 
   return (
-    <main className={styles.admin}>
+    <main className={styles.admin} onClickCapture={confirmSaveClick} onSubmitCapture={confirmSaveSubmit}>
       <section className={styles.admin_header}>
         <div>
           <span>
             <FiShield />
             Админ-панель
           </span>
-          <h1>Поддержка клиентов</h1>
-          <p>Очередь обращений, контекст сделок и ответы оператора в одном рабочем экране.</p>
+          <h1>{{support:'Поддержка клиентов',security:'Безопасность аккаунтов',deals:'P2P сделки',payments:'Способы оплаты',transactions:'Транзакции',processing:'Процессинг',trading:'Торговля',users:'Пользователи',features:'Доступность разделов',treasury:'Кошелёк и AML',referrals:'Реферальные приглашения',guarantor:'Сделки гаранта'}[activeSection] || 'Админ-панель'}</h1>
+          <Link to="/manage/commerce">Маркет и гарант: платежи и споры →</Link>
         </div>
       </section>
 
-      <section className={styles.admin_tabs} aria-label="Разделы админ-панели">
+      <ScrollableNav className={styles.admin_tabs} label="Разделы админ-панели">
+
+
+        <button type="button" onClick={()=>setActiveSection('pump')}>Создание мемкоинов</button>
+        <button type="button" onClick={()=>setActiveSection('bonuses')}>Бонусы</button>
+        <button type="button" onClick={()=>setActiveSection('content')}>Новости и о проекте</button>
+        <button type="button" className={activeSection==='helpers'?styles.admin_tabActive:''} onClick={()=>setActiveSection('helpers')}><FiUsers/>Хелперы</button>
+        <button type="button" className={activeSection === "security" ? styles.admin_tabActive : ""} onClick={() => setActiveSection("security")}>
+          <FiShield /> Безопасность{loginIps.unread > 0 ? ` (${loginIps.unread})` : ""}
+        </button>
         <button
           type="button"
           className={activeSection === "support" ? styles.admin_tabActive : ""}
@@ -1193,7 +1348,47 @@ export const Admin = () => {
           <FiUsers />
           Пользователи
         </button>
-      </section>
+        <button
+          type="button"
+          className={activeSection === "features" ? styles.admin_tabActive : ""}
+          onClick={() => setActiveSection("features")}
+        >
+          <FiActivity />
+          Доступность
+        </button>
+        <button type="button" className={activeSection==='treasury'?styles.admin_tabActive:''} onClick={()=>setActiveSection('treasury')}><FiDollarSign/>Кошелёк и AML</button>
+        <button type="button" className={activeSection==='referrals'?styles.admin_tabActive:''} onClick={()=>setActiveSection('referrals')}><FiUsers/>Приглашения</button>
+        <button type="button" className={activeSection==='guarantor'?styles.admin_tabActive:''} onClick={()=>setActiveSection('guarantor')}><FiShield/>Гарант</button>
+      </ScrollableNav>
+      {activeSection==='treasury'&&<><WalletHelp/><TreasuryCollection/><NativeChains/><DepositCompliance/></>}
+      {activeSection==='helpers'&&<Helpers/>}
+      {activeSection==='content'&&<ContentAdmin/>}
+      {activeSection==='bonuses'&&<Bonuses admin/>}
+
+      {activeSection==='pump'&&<PumpAdmin/>}
+
+      {activeSection==='referrals'&&<Referrals/>}
+      {activeSection==='guarantor'&&<GuarantorDeals/>}
+
+      {activeSection === "security" && <section className={styles.loginSecurity}>
+        <h2>IP-адреса входов</h2>
+        <p>Показаны последние 200 подходящих адресов. Поиск работает по всей истории. Новый IP после первого входа требует просмотра администратором.</p>
+        <p>Устройство указано для последнего входа с этого IP. Данные передаёт браузер; точная модель доступна не всегда.</p>
+        <label className={styles.admin_search}>
+          <FiSearch aria-hidden="true"/>
+          <input type="search" aria-label="Поиск по истории входов" maxLength={160} value={loginIpQuery} onChange={event=>setLoginIpQuery(event.target.value)} placeholder="Имя, email, ID аккаунта или IP" />
+        </label>
+        <p role="status" aria-live="polite">{loginIpsLoading?'Ищем…':`Найдено: ${loginIps.total??loginIps.rows.length} · Показано: ${loginIps.rows.length}`}</p>
+        {loginIpsError && <p role="alert">{loginIpsError}</p>}
+        <div className={styles.loginSecurityTable}><table>
+          <thead><tr><th>Аккаунт</th><th>IP</th><th>Устройство</th><th>ОС</th><th>Браузер</th><th>Предыдущий IP</th><th>Первый вход</th><th>Последний вход</th><th>Входов</th><th>Статус</th></tr></thead>
+          <tbody>{loginIps.rows.map((entry) => <tr key={entry.id}>
+            <td>{entry.username} · #{entry.user_id}</td><td>{entry.ip}</td><td title={entry.user_agent}>{entry.device}</td><td>{entry.os}</td><td>{entry.browser}</td><td>{entry.previous_ip || "—"}</td>
+            <td>{new Date(entry.first_seen_at).toLocaleString("ru-RU")}</td><td>{new Date(entry.last_seen_at).toLocaleString("ru-RU")}</td><td>{entry.login_count}</td>
+            <td>{entry.is_new_ip && !entry.reviewed_at ? <button type="button" onClick={() => reviewLoginIp(entry.id)}>Новый IP · Просмотрено</button> : entry.is_new_ip ? "Просмотрено" : "Первый IP"}</td>
+          </tr>)}{!loginIps.rows.length && !loginIpsError && !loginIpsLoading && <tr><td colSpan="10">{loginIpQuery.trim()?'По вашему запросу входов не найдено.':'История появится после следующих входов пользователей.'}</td></tr>}</tbody>
+        </table></div>
+      </section>}
 
       <section className={styles.admin_stats}>
         <div>
@@ -1517,6 +1712,20 @@ export const Admin = () => {
             </button>
           </div>
 
+          <P2pFeePolicy />
+
+          <form className={styles.admin_p2pDealForm} onSubmit={handleCreateP2pDeal}>
+            <div>
+              <h3>Создать P2P-сделку</h3>
+              <p>Сумма продавца резервируется целиком. Комиссия по действующему тарифу удержится только при успешном завершении; при отмене резерв вернётся полностью.</p>
+            </div>
+            <label><span>ID ордера</span><input inputMode="numeric" value={p2pDealDraft.orderId} onChange={(event) => setP2pDealDraft((current) => ({ ...current, orderId: event.target.value }))} /></label>
+            <label><span>ID контрагента</span><input inputMode="numeric" value={p2pDealDraft.counterpartyUserId} onChange={(event) => setP2pDealDraft((current) => ({ ...current, counterpartyUserId: event.target.value }))} /></label>
+            <label><span>Сумма USDT</span><input type="number" min="0" step="0.000001" value={p2pDealDraft.cryptoAmount} onChange={(event) => setP2pDealDraft((current) => ({ ...current, cryptoAmount: event.target.value }))} /></label>
+            <label><span>Способ оплаты</span><select value={p2pDealDraft.paymentMethod} onChange={(event) => setP2pDealDraft((current) => ({ ...current, paymentMethod: event.target.value }))}><option value="">Первый из ордера</option>{paymentDefinitions.filter((method) => method.active).map((method) => <option key={method.code} value={method.code}>{method.name}</option>)}</select></label>
+            <button type="submit" disabled={p2pDealSaving}>{p2pDealSaving ? "Создаем..." : "Создать сделку"}</button>
+          </form>
+
           <div className={styles.admin_dealsToolbar}>
             <label className={styles.admin_search}>
               <FiSearch />
@@ -1585,6 +1794,23 @@ export const Admin = () => {
                   <span>{formatDate(deal.createdAt || deal.order?.createdAt)}</span>
                 </Link>
               ))}
+          </div>
+        </section>
+      )}
+
+      {activeSection === "features" && (
+        <section className={styles.admin_deals}>
+          <div className={styles.admin_dealsTop}>
+            <div><h2>Доступность разделов</h2><p>Выключенный раздел покажет пользователям страницу обновления и заблокирует его API.</p></div>
+            <button type="button" onClick={() => loadPlatformFeatures()} disabled={platformFeaturesLoading}><FiRefreshCw /> Обновить</button>
+          </div>
+          <div className={styles.admin_featureGrid}>
+            {[['p2p', 'P2P рынок'], ['processing', 'Процессинг'], ['nft', 'NFT Market'],['market','Маркет'],['guarantor','Гарант']].map(([feature, label]) => (
+              <article key={feature}>
+                <div><strong>{label}</strong><span>{platformFeatures[feature] === false ? "На обновлении" : "Доступен"}</span></div>
+                <button type="button" disabled={platformFeaturesLoading||Boolean(platformFeatureSaving)} aria-label={`${platformFeatures[feature]===false?'Включить':'Отключить'} ${label}`} className={platformFeatures[feature] === false ? styles.admin_featureOff : ""} onClick={() => handlePlatformFeatureChange(feature, platformFeatures[feature] === false)}>{platformFeatureSaving===feature?'Сохраняем…':platformFeatures[feature] === false ? "Включить" : "Отключить"}</button>
+              </article>
+            ))}
           </div>
         </section>
       )}
@@ -1819,71 +2045,7 @@ export const Admin = () => {
         </section>
       )}
 
-      {activeSection === "transactions" && (
-        <section className={styles.admin_deals}>
-          <div className={styles.admin_dealsTop}>
-            <div>
-              <h2>Транзакции биржи</h2>
-              <p>{filteredAdminTransactions.length} из {adminTransactions.length}</p>
-            </div>
-            <button type="button" onClick={() => loadAdminTransactions()} disabled={adminTransactionsLoading}>
-              <FiRefreshCw />
-              {adminTransactionsLoading ? "Обновляем" : "Обновить"}
-            </button>
-          </div>
-
-          <div className={styles.admin_filters}>
-            <FiFilter />
-            {[
-              ["all", "Все"],
-              ["p2p", "P2P"],
-              ["internal_transfer", "Внутренние"],
-              ["external_transfer", "Ввод/вывод"],
-            ].map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                className={adminTransactionFilter === value ? styles.admin_filterActive : ""}
-                onClick={() => setAdminTransactionFilter(value)}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          <div className={styles.admin_dealsTable}>
-            <div className={styles.admin_transactionsHead}>
-              <span>Тип</span>
-              <span>ID</span>
-              <span>Откуда</span>
-              <span>Куда</span>
-              <span>Сумма</span>
-              <span>Статус</span>
-              <span>Дата</span>
-            </div>
-            {adminTransactionsLoading && (
-              <div className={styles.admin_dealsEmpty}>Загружаем транзакции...</div>
-            )}
-            {!adminTransactionsLoading && filteredAdminTransactions.map((transaction) => (
-              <div key={transaction.id} className={styles.admin_transactionsRow}>
-                <span>{transaction.type}</span>
-                <span>#{transaction.rawId}</span>
-                <span>{transaction.from || "-"}</span>
-                <span>{transaction.to || "-"}</span>
-                <span>
-                  {transaction.amount} {transaction.currency}
-                  {transaction.fiatAmount ? <small>{transaction.fiatAmount} RUB</small> : null}
-                </span>
-                <span>{transaction.status}</span>
-                <span>{formatDate(transaction.createdAt)}</span>
-              </div>
-            ))}
-            {!adminTransactionsLoading && filteredAdminTransactions.length === 0 && (
-              <div className={styles.admin_dealsEmpty}>Транзакции не найдены</div>
-            )}
-          </div>
-        </section>
-      )}
+      {activeSection === "transactions" && <TransactionHistory admin title="Транзакции биржи"/>}
 
       {activeSection === "processing" && (
         <section className={styles.admin_processing}>
@@ -2149,7 +2311,7 @@ export const Admin = () => {
               <h2>Мониторинг трейдинга</h2>
               <p>Spot-сделки, торговые ордера, фьючерсы и funding пользователей</p>
             </div>
-            <button type="button" onClick={() => loadTrading()} disabled={tradingLoading}>
+            <button type="button" onClick={() => { loadTrading(); loadExchangeMarket(); }} disabled={tradingLoading}>
               <FiRefreshCw />
               {tradingLoading ? "Обновляем" : "Обновить"}
             </button>
@@ -2163,6 +2325,34 @@ export const Admin = () => {
             <article><span>Открытые позиции</span><strong>{tradingData.summary?.openPositions || 0}</strong></article>
             <article><span>Реализованный PnL</span><strong className={Number(tradingData.summary?.realizedPnl || 0) >= 0 ? styles.admin_positive : styles.admin_negative}>{formatTradingAmount(tradingData.summary?.realizedPnl, 2)} USDT</strong></article>
           </div>
+
+          <section className={styles.admin_exchangeDepth} aria-label="Биржевой стакан">
+            <div className={styles.admin_exchangeDepthHeader}>
+              <div><h3>Стакан биржи</h3><span>{marketSnapshot?.source || "Публичный рынок"} · заявки покупки и продажи</span></div>
+              <label>
+                <span className={styles.admin_srOnly}>Торговая пара стакана</span>
+                <select value={marketPair} onChange={(event) => setMarketPair(event.target.value)}>
+                  <option value="BTC-USDT">BTC/USDT</option><option value="ETH-USDT">ETH/USDT</option>
+                </select>
+              </label>
+            </div>
+            {marketLoading && !marketSnapshot ? <p className={styles.admin_exchangeDepthEmpty}>Загружаем стакан…</p> : (
+              <div className={styles.admin_exchangeDepthGrid}>
+                <AdminMarketChart candles={marketSnapshot?.candles || []} />
+                {[{ key: "asks", title: "Продажа", className: styles.admin_negative }, { key: "bids", title: "Покупка", className: styles.admin_positive }].map((side) => (
+                  <div key={side.key}>
+                    <h4 className={side.className}>{side.title}</h4>
+                    <div className={styles.admin_exchangeDepthLabels}><span>Цена USDT</span><span>Количество</span></div>
+                    {(marketSnapshot?.depth?.[side.key] || []).slice(0, 6).map((row) => (
+                      <div className={styles.admin_exchangeDepthRow} key={`${side.key}-${row.price}`}><span>{formatTradingAmount(row.price, 2)}</span><b>{formatTradingAmount(row.quantity, 8)} {marketPair.split("-")[0]}</b></div>
+                    ))}
+                    {!marketSnapshot?.depth?.[side.key]?.length && <p className={styles.admin_exchangeDepthEmpty}>Данные временно недоступны</p>}
+                  </div>
+                ))}
+              </div>
+            )}
+            <p className={styles.admin_exchangeDepthNote}>Это публичные заявки {marketSnapshot?.source || "биржи"} для справки; исполнение ордеров Goblin происходит отдельно.</p>
+          </section>
 
           <div className={styles.admin_tradingViews}>
             {Object.entries(tradingViewLabels).map(([value, label]) => (
@@ -2361,20 +2551,29 @@ export const Admin = () => {
                   </div>
                   <div className={styles.admin_userMeta}>
                     <span>{userStatusLabels[user.status] || user.status || "Активен"}</span>
-                    <span>{user.walletCount} кошелька</span>
+                    <span>{Object.keys(user.walletBalances || {}).length} валют</span>
                     <span>${Number(user.totalBalanceUsd || 0).toFixed(2)}</span>
+                    <span className={styles.admin_walletBreakdown}>
+                      {Object.entries(user.walletBalances || {}).map(([currency, amount]) => `${currency}: ${formatWalletBalance(amount, currency)}`).join(" · ")}
+                    </span>
                   </div>
                   <div className={styles.admin_userControls}>
+                    <UserBalances userId={user.id}/>
                     {[
                       ["depositsEnabled", "Ввод"],
                       ["withdrawalsEnabled", "Вывод"],
                       ["internalTransfersEnabled", "Внутренние переводы"],
                       ["p2pEnabled", "P2P"],
+                      ["nftEnabled", "NFT-маркет"],
+                      ["guarantorEnabled", "Гарант"],
+                      ["tradingEnabled", "Торговля"],
+                      ["marketAccountsEnabled", "Маркет: аккаунты"],
+                      ["marketServicesEnabled", "Маркет: услуги"],
                     ].map(([key, label]) => (
                       <label key={key}>
                         <input
                           type="checkbox"
-                          disabled={user.status === "deleted"}
+                          disabled={user.status === "deleted" || savingUserControls.includes(user.id)}
                           checked={Boolean(user[key])}
                           onChange={(event) =>
                             handleUpdateUserControls(user, { [key]: event.target.checked })
@@ -2385,7 +2584,7 @@ export const Admin = () => {
                     ))}
                     <button
                       type="button"
-                      disabled={user.status === "deleted"}
+                      disabled={user.status === "deleted" || savingUserControls.includes(user.id)}
                       onClick={() =>
                         handleUpdateUserControls(user, {
                           status: user.status === "blocked" ? "active" : "blocked",

@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import {ChatProfile} from './ChatProfile';
 import io from 'socket.io-client';
 import styles from './Chat.module.scss';
 import api from '../../api';
@@ -164,7 +165,7 @@ const Chat = ({ dealId, currentUser }) => {
             }`}
           >
             <div className={styles.messageContent}>
-              <p><strong>{msg.sender?.username || 'Пользователь'}</strong></p>
+              <ChatProfile profile={msg.sender}/>
               <p>{msg.text}</p>
               <span className={styles.timestamp}>
                 {new Date(msg.createdAt).toLocaleTimeString()}

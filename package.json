@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "dependencies": {
+    "@capacitor/android": "^7.6.0",
+    "@capacitor/core": "^7.6.0",
     "@testing-library/dom": "^10.4.0",
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.2.0",
@@ -25,6 +27,10 @@
     "dev": "vite",
     "start": "vite",
     "build": "vite build",
+    "android:sync": "npm run build && cap sync android",
+    "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
+    "android:release": "npm run android:sync && cd android && ./gradlew assembleRelease",
+    "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease",
     "test": "echo 'No tests configured'",
     "eject": "echo 'Eject not available with Vite'",
     "tw": "tailwindcss -i ./src/index.css -o ./src/output.css --watch"
@@ -42,12 +48,14 @@
     ]
   },
   "devDependencies": {
+    "@capacitor/cli": "^7.6.0",
     "@tailwindcss/cli": "^4.3.0",
     "@tailwindcss/postcss": "^4.1.18",
     "@vitejs/plugin-react": "^5.1.0",
     "autoprefixer": "^10.4.27",
     "postcss": "^8.5.9",
     "sass": "^1.93.3",
-    "tailwindcss": "^4.3.0"
+    "tailwindcss": "^4.3.0",
+    "typescript": "^5.7.3"
   }
 }

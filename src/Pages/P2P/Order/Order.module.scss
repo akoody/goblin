@@ -1,4 +1,5 @@
 .order {
+  width: 100%; max-width: 1440px; margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -28,8 +29,8 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   &_alert {
@@ -40,7 +41,7 @@
     color: var(--primary-deep);
     background: var(--primary-soft);
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 600;
     line-height: 145%;
   }
 
@@ -59,14 +60,14 @@
       min-height: 34px;
       color: var(--text-muted);
       font-size: 14px;
-      font-weight: 850;
+      font-weight: 600;
     }
 
     span {
       margin-left: auto;
       color: var(--text-muted);
       font-size: 13px;
-      font-weight: 850;
+      font-weight: 600;
     }
   }
 
@@ -90,7 +91,7 @@
       background: transparent;
       color: var(--text-dark);
       font-size: 38px;
-      font-weight: 850;
+      font-weight: 600;
     }
 
     div {
@@ -99,12 +100,12 @@
       gap: 10px;
       color: var(--text-muted);
       font-size: 16px;
-      font-weight: 850;
+      font-weight: 600;
     }
 
     button {
       color: #9a5c00;
-      font-weight: 900;
+      font-weight: 600;
     }
   }
 
@@ -126,7 +127,7 @@
     padding: 0 16px;
     color: var(--text-dark);
     font-size: 16px;
-    font-weight: 900;
+    font-weight: 600;
 
     span {
       display: flex;
@@ -146,7 +147,7 @@
       border: 1px solid color-mix(in srgb, var(--method-tone) 30%, white);
       border-radius: 10px;
       font-size: 12px;
-      font-weight: 900;
+      font-weight: 600;
     }
 
     div {
@@ -177,7 +178,7 @@
     strong {
       color: var(--text-dark);
       font-size: 15px;
-      font-weight: 900;
+      font-weight: 600;
     }
 
     span {
@@ -199,8 +200,8 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
 
     &_main {
       display: flex;
@@ -221,8 +222,8 @@
         padding: 8px 12px;
         background: #fff;
         border: 1px solid var(--border);
-        border-radius: 999px;
-        font-weight: 800;
+        border-radius: 6px;
+        font-weight: 600;
       }
     }
 
@@ -278,7 +279,7 @@
     padding: 28px var(--sides-padding);
     color: var(--text-muted);
     font-size: 18px;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &_notice {
@@ -289,7 +290,7 @@
     border: 1px solid rgba(233, 169, 7, 0.22);
     border-radius: var(--radius-sm);
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 600;
     line-height: 145%;
   }
 
@@ -311,7 +312,7 @@
     padding: 18px;
     background: #fff;
     border-radius: var(--radius-lg);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.24);
+    box-shadow: none;
 
     > div {
       display: flex;
@@ -321,7 +322,7 @@
 
       h2 {
         font-size: 22px;
-        font-weight: 900;
+        font-weight: 600;
       }
 
       button {
@@ -337,7 +338,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-size: 15px;
-      font-weight: 850;
+      font-weight: 600;
 
       span {
         display: grid;
@@ -356,14 +357,14 @@
         border: 1px solid color-mix(in srgb, var(--method-tone) 30%, white);
         border-radius: 10px;
         font-size: 12px;
-        font-weight: 900;
+        font-weight: 600;
       }
 
       strong {
         display: block;
         color: var(--text-dark);
         font-size: 15px;
-        font-weight: 900;
+        font-weight: 600;
       }
 
       small {
@@ -378,7 +379,7 @@
         color: var(--primary-deep);
         font-size: 12px;
         font-style: normal;
-        font-weight: 900;
+        font-weight: 600;
         white-space: nowrap;
       }
     }

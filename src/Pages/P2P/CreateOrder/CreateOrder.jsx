@@ -11,7 +11,6 @@ import { FiChevronDown, FiSearch, FiX } from "react-icons/fi";
 import {
   formatMoney,
   p2pPaymentMethodGroups,
-  p2pPaymentMethods,
 } from "../p2pUtils";
 import { P2PMobileNav } from "../P2PMobileNav";
 
@@ -21,14 +20,14 @@ export const CreateOrder = () => {
   const [price, setPrice] = useState("");
   const [minLimit, setMinLimit] = useState("");
   const [maxLimit, setMaxLimit] = useState("");
-  const [paymentMethods, setPaymentMethods] = useState(["sbp", "card", "tbank"]);
+  const [paymentMethods, setPaymentMethods] = useState([]);
   const [paymentSearch, setPaymentSearch] = useState("");
   const [paymentsOpen, setPaymentsOpen] = useState(false);
-  const [paymentDefinitions, setPaymentDefinitions] = useState([]);
+  const [paymentDefinitions, setPaymentDefinitions] = useState(null);
   const [loading, setLoading] = useState(false);
   const [balance, setBalance] = useState({ usdtBalance: 0, trxBalance: 0 });
   const navigate = useNavigate();
-  const availablePaymentMethods = paymentDefinitions.length > 0 ? paymentDefinitions : p2pPaymentMethods;
+  const availablePaymentMethods = Array.isArray(paymentDefinitions) ? paymentDefinitions : [];
   const availablePaymentGroups = useMemo(() => {
     const usedGroups = new Set(availablePaymentMethods.map((method) => method.group));
     const knownGroups = p2pPaymentMethodGroups.filter((group) => usedGroups.has(group.id));
@@ -81,8 +80,18 @@ export const CreateOrder = () => {
       .then((response) => {
         const definitions = Array.isArray(response.data) ? response.data : [];
         setPaymentDefinitions(definitions);
+        setPaymentMethods((current) => {
+          const availableIds = new Set(definitions.map((method) => method.id || method.code));
+          const validSelections = current.filter((method) => availableIds.has(method));
+          return validSelections.length > 0
+            ? validSelections
+            : definitions.slice(0, 3).map((method) => method.id || method.code);
+        });
       })
-      .catch(() => setPaymentDefinitions([]));
+      .catch(() => {
+        setPaymentDefinitions([]);
+        enqueueSnackbar("Не удалось загрузить доступные способы оплаты", { variant: "error" });
+      });
   }, []);
 
   const handleSubmit = (e) => {

@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import styles from "./Orders.module.scss";
 import bg from "../../../assets/images/Group 756.png";
-import { TbFilter, TbPlus, TbRefresh, TbShieldCheck } from "react-icons/tb";
+import { TbFilter, TbInbox, TbPlus, TbRefresh, TbShieldCheck } from "react-icons/tb";
 import { FaUser } from "react-icons/fa";
 import { enqueueSnackbar } from "notistack";
 import { NumericFormat } from "react-number-format";
@@ -33,7 +33,7 @@ export const Orders = () => {
 
   const loadOrders = () => {
     setLoading(true);
-    api.get("/order")
+    api.get(localStorage.getItem("token") ? "/order" : "/order/catalog")
       .then((res) => {
         setData(Array.isArray(res.data) ? res.data : []);
       })
@@ -185,7 +185,7 @@ export const Orders = () => {
               </div>
             ) : items.length > 0 ? (
               items.map((item) => {
-                const isOwnOrder = item.user?.id === currentUser?.userId;
+                const isOwnOrder = Boolean(currentUser && item.user?.id === currentUser.userId);
                 const stats = getMerchantStats(item.user?.id || item.id);
                 const availableAmount = Number(item.available_amount ?? item.amount);
                 const minLimit = Number(item.min_limit || 0);
@@ -269,7 +269,9 @@ export const Orders = () => {
               })
             ) : (
               <div className={styles.deals_content_main_body_empty}>
-                <p className="p">Подходящих ордеров нет</p>
+                <TbInbox aria-hidden="true" />
+                <strong>Подходящих ордеров нет</strong>
+                <p>Измените фильтры или создайте объявление.</p>
               </div>
             )}
           </div>
