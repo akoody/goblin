@@ -1,0 +1,5 @@
+ALTER TABLE native_chain_policy ADD COLUMN aml_disabled TINYINT(1) NOT NULL DEFAULT 0;
+ALTER TABLE deposit_reviews
+ ADD COLUMN aml_exempt TINYINT(1) NOT NULL DEFAULT 0,
+ ADD COLUMN chain_retry_at TIMESTAMP NULL,
+ ADD COLUMN chain_error VARCHAR(80) NULL;

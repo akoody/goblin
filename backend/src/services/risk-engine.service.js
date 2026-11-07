@@ -1,6 +1,6 @@
 import { db } from "../config/db.js";
 import { closeFuturesPosition } from "./exchange.service.js";
-import { getMarketSnapshot } from "./market-data.service.js";
+import { getMarketSnapshot,supportedSymbols } from "./market-data.service.js";
 import Decimal from "decimal.js";
 
 const INTERVAL_MS = 15_000;
@@ -65,7 +65,8 @@ async function liquidateCrossedPositions() {
   if (running) return;
   running = true;
   try {
-    for (const symbol of ["BTC-USDT", "ETH-USDT"]) {
+    for (const symbol of supportedSymbols) {
+      try {
       const snapshot = await getMarketSnapshot(symbol);
       const mark = Number(snapshot.price);
       await applyFunding(symbol, snapshot.price);
@@ -85,6 +86,7 @@ async function liquidateCrossedPositions() {
           console.error(`Liquidation ${position.id} deferred:`, error.message);
         }
       }
+      } catch(error) { console.error(`Risk processing deferred for ${symbol}:`,error.message); }
     }
   } catch (error) {
     console.error("Risk engine cycle failed:", error.message);

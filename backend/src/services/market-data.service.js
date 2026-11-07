@@ -1,7 +1,9 @@
 const SYMBOLS = {
   "BTC-USDT": { binance: "BTCUSDT", bybit: "BTCUSDT" },
   "ETH-USDT": { binance: "ETHUSDT", bybit: "ETHUSDT" },
+  ...Object.fromEntries(['SOL','DOGE','SHIB','PEPE','BONK','WIF','FLOKI'].map(base=>[`${base}-USDT`,{binance:`${base}USDT`,bybit:`${base}USDT`}])),
 };
+export const supportedSymbols=Object.freeze(Object.keys(SYMBOLS));
 
 const cache = new Map();
 const CACHE_TTL_MS = 4_000;
@@ -20,9 +22,10 @@ const withTimeout = async (url, timeout = 3500) => {
 
 const fromBinance = async (symbol) => {
   const code = SYMBOLS[symbol].binance;
-  const [ticker, klines] = await Promise.all([
+  const [ticker, klines, depth] = await Promise.all([
     withTimeout(`https://api.binance.com/api/v3/ticker/24hr?symbol=${code}`),
     withTimeout(`https://api.binance.com/api/v3/klines?symbol=${code}&interval=1h&limit=48`),
+    withTimeout(`https://api.binance.com/api/v3/depth?symbol=${code}&limit=50`),
   ]);
 
   return {
@@ -40,6 +43,10 @@ const fromBinance = async (symbol) => {
       close: item[4],
       volume: item[7],
     })),
+    depth: {
+      bids: (depth.bids || []).map(([price, quantity]) => ({ price, quantity })),
+      asks: (depth.asks || []).map(([price, quantity]) => ({ price, quantity })),
+    },
     source: "Binance",
     updatedAt: new Date().toISOString(),
   };
@@ -47,12 +54,14 @@ const fromBinance = async (symbol) => {
 
 const fromBybit = async (symbol) => {
   const code = SYMBOLS[symbol].bybit;
-  const [tickerData, candleData] = await Promise.all([
+  const [tickerData, candleData, orderbookData] = await Promise.all([
     withTimeout(`https://api.bybit.com/v5/market/tickers?category=spot&symbol=${code}`),
     withTimeout(`https://api.bybit.com/v5/market/kline?category=spot&symbol=${code}&interval=60&limit=48`),
+    withTimeout(`https://api.bybit.com/v5/market/orderbook?category=spot&symbol=${code}&limit=50`),
   ]);
   const ticker = tickerData.result?.list?.[0];
   if (!ticker) throw new Error("Bybit ticker is unavailable");
+  const orderbook = orderbookData.result;
 
   return {
     symbol,
@@ -69,6 +78,10 @@ const fromBybit = async (symbol) => {
       close: item[4],
       volume: item[6],
     })),
+    depth: {
+      bids: (orderbook?.b || []).map(([price, quantity]) => ({ price, quantity })),
+      asks: (orderbook?.a || []).map(([price, quantity]) => ({ price, quantity })),
+    },
     source: "Bybit",
     updatedAt: new Date().toISOString(),
   };

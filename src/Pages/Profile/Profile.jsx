@@ -1,7 +1,10 @@
 import React, { useEffect, useState } from "react";
+import {ProfileStats} from './ProfileStats';
+import {NativeWithdrawal} from './NativeWithdrawal';
+import {TransactionHistory} from '../../Components/TransactionHistory/TransactionHistory';
+import { useSearchParams } from "react-router-dom";
 import styles from "./Profile.module.scss";
 import {
-  BiCheckCircle,
   BiChevronDown,
   BiExit,
   BiGitBranch,
@@ -19,42 +22,50 @@ import { GoArrowDownLeft, GoArrowUpRight } from "react-icons/go";
 import { Loader } from "../../Components/Loader/Loader";
 import api from "../../api";
 import { BsClock, BsCoin } from "react-icons/bs";
+import { FiInbox } from "react-icons/fi";
 import { LuTrash2 } from "react-icons/lu";
 import { TbCopy, TbEdit } from "react-icons/tb";
 import { enqueueSnackbar } from "notistack";
 import { formatAssetAmount, getBalanceValue } from "../../utils/wallets";
 import QRCode from "react-qr-code";
+import {WalletAssets,SolanaWallet} from "./WalletAssets";
 
 const walletCurrencies = ["BTC", "ETH", "USDT", "TRX"];
+const walletPrecision = { BTC: 8, ETH: 18, USDT: 6, TRX: 6 };
 
 const getCurrencyColor = (currency) => {
-  if (currency === "USDT") return "#86C239";
-  if (currency === "TRX") return "#e9a907";
-  if (currency === "BTC") return "#f7931a";
-  return "#1291d9";
+  if (currency === "USDT") return "#28633b";
+  if (currency === "TRX") return "#916e10";
+  if (currency === "BTC") return "#a95a0b";
+  return "#515d72";
 };
 
+const walletNetworkFallbacks = {
+  BTC: { network: "Bitcoin", standard: "Bitcoin mainnet", addressFormat: "bc1…" },
+  ETH: { network: "Ethereum", standard: "Ethereum mainnet", addressFormat: "0x…" },
+  USDT: { network: "TRON", standard: "TRC-20", addressFormat: "T…", feeCurrency: "TRX" },
+  TRX: { network: "TRON", standard: "TRON mainnet", addressFormat: "T…", feeCurrency: "TRX" },
+};
+
+const getWalletNetwork = (currency, wallet) =>
+  wallet?.network || walletNetworkFallbacks[currency];
+
 export const Profile = () => {
-  const [page, setPage] = React.useState("transaction");
-  const [balance, setBalance] = React.useState(0);
-  const [loading, setLoading] = useState(true);
+  const [searchParams] = useSearchParams();
+  const [page, setPage] = React.useState("assets");
   const [navigationOpen, setNavigationOpen] = useState(false);
 
   useEffect(() => {
-    api
-      .get(`/api/transactions/balance`)
-      .then((response) => {
-        setBalance(response.data);
-      })
-      .catch((err) => {
-        console.log(err);
-      })
-      .finally(() => setLoading(false));
-  }, []);
+    const requestedSection = searchParams.get("section");
+    if (requestedSection === "assets" || [...walletCurrencies,"SOL"].includes(requestedSection) || navigationItems.some((item) => item.key === requestedSection)) {
+      setPage(requestedSection);
+    }
+  }, [searchParams]);
+
+
 
   return (
     <div className={styles.profile}>
-      {loading && <Loader />}
       <section className={styles.profile_header}>
         <div>
           <h1 className="h1 title">Кошелек и профиль</h1>
@@ -64,80 +75,27 @@ export const Profile = () => {
           </p>
         </div>
       </section>
-      <div
+      <nav
         className={`${styles.profile_navigation} ${
           navigationOpen ? styles.profile_navigation_open : ""
         }`}
+        aria-label="Разделы кошелька и профиля"
       >
-        <div
+        <button
+          type="button"
           className={styles.profile_navigation_item_active}
           onClick={() => setNavigationOpen((prev) => !prev)}
+          aria-expanded={navigationOpen}
         >
           {navigationItems.find((item) => item.key == page)?.icon || <BsCoin />}
           {navigationItems.find((item) => item.key == page)?.name ||
-            `Действия с ${page}`}{" "}
-          <button>
-            <FaChevronDown />
-          </button>
-        </div>
-        <div
-          className={
-            page == "USDT"
-              ? styles.profile_navigation_item_active
-              : styles.profile_navigation_item
-          }
-          onClick={() => {
-            setPage("USDT");
-            setNavigationOpen(false);
-          }}
-        >
-          <BsCoin />
-          {formatAssetAmount(getBalanceValue(balance, "USDT"), 2)} <span>USDT</span>
-        </div>{" "}
-        <div
-          className={
-            page == "TRX"
-              ? styles.profile_navigation_item_active
-              : styles.profile_navigation_item
-          }
-          onClick={() => {
-            setPage("TRX");
-            setNavigationOpen(false);
-          }}
-        >
-          <BsCoin />
-          {formatAssetAmount(getBalanceValue(balance, "TRX"), 2)} <span>TRX</span>
-        </div>{" "}
-        <div
-          className={
-            page == "BTC"
-              ? styles.profile_navigation_item_active
-              : styles.profile_navigation_item
-          }
-          onClick={() => {
-            setPage("BTC");
-            setNavigationOpen(false);
-          }}
-        >
-          <BsCoin />
-          {formatAssetAmount(getBalanceValue(balance, "BTC"), 8)} <span>BTC</span>
-        </div>{" "}
-        <div
-          className={
-            page == "ETH"
-              ? styles.profile_navigation_item_active
-              : styles.profile_navigation_item
-          }
-          onClick={() => {
-            setPage("ETH");
-            setNavigationOpen(false);
-          }}
-        >
-          <BsCoin />
-          {formatAssetAmount(getBalanceValue(balance, "ETH"), 2)} <span>ETH</span>
-        </div>{" "}
+            (page === "assets" ? "Активы" : `Действия с ${page}`)}{" "}
+          <FaChevronDown />
+        </button>
+        <button type="button" className={page === "assets" ? styles.profile_navigation_item_active : styles.profile_navigation_item} onClick={()=>{setPage("assets");setNavigationOpen(false);}}><BiWallet/>Активы</button>
         {navigationItems.map((item) => (
-          <div
+          <button
+            type="button"
             key={item.id}
             className={
               page == item.key
@@ -150,118 +108,30 @@ export const Profile = () => {
             }}
           >
             {item.icon} {item.name}
-          </div>
+          </button>
         ))}
-        <div
+        <button
+          type="button"
           className={styles.profile_navigation_item}
           onClick={() => {
-            localStorage.clear();
-            window.location.reload();
+                import('../../session').then(({signOut})=>signOut());
           }}
         >
           <BiExit /> Выйти
-        </div>
-      </div>
+        </button>
+      </nav>
       <div
         className={`${styles.profile_content} ${
           navigationOpen ? styles.profile_content_blur : ""
         }`}
       >
-        {navigationItems?.find((item) => item.key == page)?.page || (
-          <Action currency={page} />
-        )}
+        {page === "assets" ? <WalletAssets onSelect={currency=>{setPage(currency);setNavigationOpen(false);}}/> : page === "SOL" ? <><button type="button" onClick={()=>setPage("assets")}>← Все активы</button><SolanaWallet/></> : navigationItems?.find((item) => item.key == page)?.page || <><button type="button" onClick={()=>setPage("assets")}>← Все активы</button><Action key={page} currency={page}/></>}
       </div>
     </div>
   );
 };
 
-const Info = () => {
-  const [user, setUser] = React.useState({});
-  const [balance, setBalance] = React.useState(0);
-  const token = localStorage.getItem("token");
 
-  useEffect(() => {
-    api
-      .get(`/api/auth/me`, {
-        headers: { Authorization: `Bearer ${token}` },
-      })
-      .then((response) => {
-        setUser(response.data);
-      })
-      .catch((err) => {
-        if (err.response?.status == 401) {
-          localStorage.removeItem("token");
-          window.location.reload();
-        }
-      });
-
-    api
-      .get(`/api/transactions/balance`)
-      .then((response) => {
-        setBalance(response.data);
-      })
-      .catch((err) => {
-        console.log(err);
-      });
-  }, []);
-  return (
-    <div className={styles?.profile_info}>
-      <div>
-        <h2 className={styles.profile_info_name}>
-          {/* Геннадий Орлов Александрович */}
-          {user?.fullName || "Имя не указано"}
-        </h2>
-        <p className={styles.profile_info_verification}>
-          <BiCheckCircle style={{ fontSize: "22px" }} /> Верифицирован
-        </p>
-      </div>
-      <div className={styles.profile_info_lines}>
-        <div>
-          <p>Количество СДЕЛОК В P2P</p>
-          <span></span>
-        </div>{" "}
-        <div>
-          <p>% УСПЕШНЫХ СДЕЛОК В P2P</p>
-          <span></span>
-        </div>{" "}
-        <div>
-          <p>Количество ОТМЕНЁНЫХ СДЕЛОК В P2P</p>
-          <span></span>
-        </div>{" "}
-        <div>
-          <p>Количество ОТДАННЫХ USDT В ПРОЦЕССИНГЕ</p>
-          <span></span>
-        </div>
-      </div>
-      <div className={styles.profile_info_status}>
-        <h2>Статус на рынкe:</h2>
-        <p>
-          <span></span> Онлайн меняла
-        </p>
-        <div>
-          <button className="green-button">Добавить курьера</button>
-          <button className="green-button">Получить статус обменника</button>
-        </div>
-      </div>
-      {/* Почта: {user?.email} <br />
-      Дата регистрации:{" "}
-      {user?.created_at
-        ? new Date(user.created_at).toLocaleDateString()
-        : ""}{" "}
-      <br />
-      Крипто кошельки:{" "}
-      {user?.wallets?.map((wallet) => {
-        return (
-          <div key={wallet?.id}>
-            <p>Адрес: {wallet?.address}</p>
-            <p>Блокчейн: {wallet?.currency}</p>
-            <p>Баланс: {wallet.balance}</p>
-          </div>
-        );
-      })} */}
-    </div>
-  );
-};
 
 const ProfileTransaction = () => {
   const [transactionType, setTransactionType] = React.useState(0);
@@ -269,10 +139,12 @@ const ProfileTransaction = () => {
   const [amount, setAmount] = React.useState(0);
   const [currency, setCurrency] = React.useState("USDT");
   const [isOpen, setIsOpen] = React.useState(false);
-  const [currencyColor, setCurrencyColor] = React.useState("#86C239");
+  const [currencyColor, setCurrencyColor] = React.useState("#28633b");
   const [isModalOpen, setIsModalOpen] = React.useState(false);
   const [code, setCode] = React.useState("");
   const [isCodeSent, setIsCodeSent] = React.useState(false);
+  const submissionInFlight = React.useRef(false);
+  const idempotencyRequest = React.useRef(null);
 
   const handleInnerSubmit = (e) => {
     e.preventDefault();
@@ -297,7 +169,7 @@ const ProfileTransaction = () => {
               onClick={() => {
                 setCurrency("USDT");
                 setIsOpen(false);
-                setCurrencyColor("#86C239");
+                setCurrencyColor("#28633b");
               }}
             >
               USDT
@@ -307,7 +179,7 @@ const ProfileTransaction = () => {
               onClick={() => {
                 setCurrency("TRX");
                 setIsOpen(false);
-                setCurrencyColor("#e9a907");
+                setCurrencyColor("#916e10");
               }}
             >
               TRX
@@ -317,7 +189,7 @@ const ProfileTransaction = () => {
               onClick={() => {
                 setCurrency("BTC");
                 setIsOpen(false);
-                setCurrencyColor("#e9a907");
+                setCurrencyColor("#a95a0b");
               }}
             >
               BTC
@@ -327,7 +199,7 @@ const ProfileTransaction = () => {
               onClick={() => {
                 setCurrency("ETH");
                 setIsOpen(false);
-                setCurrencyColor("#1291d9");
+                setCurrencyColor("#515d72");
               }}
             >
               ETH
@@ -339,12 +211,25 @@ const ProfileTransaction = () => {
   );
 
   const handleTranslate = () => {
+    if (submissionInFlight.current) return;
     if (address == "" || amount == "" || currency == "" || isCodeSent == true) {
       enqueueSnackbar("Заполните получателя, валюту и сумму", { variant: "error" });
       return;
     }
 
+    submissionInFlight.current = true;
     setIsCodeSent(true);
+
+    const requestData = transactionType == 0
+      ? { email: address, amount, currency }
+      : { address, amount, currency };
+    const fingerprint = JSON.stringify({ transactionType, ...requestData });
+    if (idempotencyRequest.current?.fingerprint !== fingerprint) {
+      idempotencyRequest.current = {
+        fingerprint,
+        key: window.crypto.randomUUID(),
+      };
+    }
 
     const internalConfig = {
       method: "POST",
@@ -354,11 +239,7 @@ const ProfileTransaction = () => {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
 
-      data: {
-        email: address,
-        amount,
-        currency,
-      },
+      data: requestData,
     };
 
     const externalConfig = {
@@ -369,20 +250,18 @@ const ProfileTransaction = () => {
         Authorization: `Bearer ${localStorage.getItem("token")}`,
       },
 
-      data: {
-        address: address,
-        amount,
-        currency,
-      },
+      data: requestData,
     };
 
     api
       .post(
         transactionType == 0 ? internalConfig.url : externalConfig.url,
-        transactionType == 0 ? internalConfig.data : externalConfig.data
+        requestData,
+        { headers: { "Idempotency-Key": idempotencyRequest.current.key } }
       )
       .then((response) => {
         console.log(response.data);
+        idempotencyRequest.current = null;
         setIsModalOpen(3);
       })
       .catch((err) => {
@@ -393,13 +272,15 @@ const ProfileTransaction = () => {
       .finally(() => {
         setCode("");
         setIsCodeSent(false);
+        submissionInFlight.current = false;
       });
   };
 
   return (
     <div className={styles.profile_transaction}>
       <div className={styles.profile_transaction_top}>
-        <div
+        <button
+          type="button"
           className={
             transactionType == 0
               ? styles.profile_transaction_top_item_active
@@ -408,8 +289,9 @@ const ProfileTransaction = () => {
           onClick={() => setTransactionType(0)}
         >
           Внутренний перевод
-        </div>
-        <div
+        </button>
+        <button
+          type="button"
           className={
             transactionType == 1
               ? styles.profile_transaction_top_item_active
@@ -418,7 +300,7 @@ const ProfileTransaction = () => {
           onClick={() => setTransactionType(1)}
         >
           Внешний перевод
-        </div>
+        </button>
       </div>
       {transactionType == 0 ? (
         <>
@@ -449,8 +331,8 @@ const ProfileTransaction = () => {
               <NumericFormat
                 required
                 thousandSeparator=" "
-                decimalScale={2}
-                fixedDecimalScale={true}
+                decimalScale={walletPrecision[currency]}
+                fixedDecimalScale={false}
                 allowNegative={false}
                 decimalSeparator=","
                 value={amount}
@@ -505,8 +387,8 @@ const ProfileTransaction = () => {
               <NumericFormat
                 required
                 thousandSeparator=" "
-                decimalScale={2}
-                fixedDecimalScale={true}
+                decimalScale={walletPrecision[currency]}
+                fixedDecimalScale={false}
                 allowNegative={false}
                 decimalSeparator=","
                 value={amount}
@@ -560,6 +442,7 @@ const ProfileTransaction = () => {
               Перевести
             </button>
             <button
+              type="button"
               className="red-button"
               onClick={() => {
                 setIsModalOpen(false);
@@ -632,155 +515,28 @@ const ProfileTransaction = () => {
   );
 };
 
-const getTransactionTarget = (transaction) => {
-  if (transaction.type === "INTERNAL") {
-    return transaction.direction === "IN"
-      ? transaction.senderEmail
-      : transaction.recipientEmail;
-  }
 
-  return transaction.direction === "IN"
-    ? transaction.senderAddress
-    : transaction.receiverAddress;
-};
-
-const TransactionHistory = ({
-  currencyFilter = "ALL",
-  directionFilter = "ALL",
-  compact = false,
-  title = "История транзакций",
-  emptyText,
-}) => {
-  const [data, setData] = React.useState([]);
-  const [selectedCurrency, setSelectedCurrency] = React.useState(currencyFilter);
-
-  useEffect(() => {
-    api
-      .get(`/api/transactions/transactions`)
-      .then((response) => {
-        setData(response.data);
-      })
-      .catch((err) => {});
-  }, []);
-
-  useEffect(() => {
-    setSelectedCurrency(currencyFilter);
-  }, [currencyFilter]);
-
-  const filteredData = data.filter((transaction) => {
-    if (selectedCurrency !== "ALL" && String(transaction.currency).toUpperCase() !== selectedCurrency) {
-      return false;
-    }
-
-    if (directionFilter !== "ALL" && transaction.direction !== directionFilter) {
-      return false;
-    }
-
-    return true;
-  });
-
-  return (
-    <div className={`${styles.profile_transaction_history} ${compact ? styles.profile_transaction_history_compact : ""}`}>
-      <h1>
-        <BsClock style={{ color: "#86C239" }} />
-        {title}
-      </h1>
-      {!compact && (
-        <div className={styles.profile_transaction_history_filters}>
-          {["ALL", ...walletCurrencies].map((currency) => (
-            <button
-              key={currency}
-              type="button"
-              className={selectedCurrency === currency ? styles.profile_transaction_history_filterActive : ""}
-              onClick={() => setSelectedCurrency(currency)}
-            >
-              {currency === "ALL" ? "Все" : currency}
-            </button>
-          ))}
-        </div>
-      )}
-      <table className={styles.profile_transaction_history_table}>
-        <tr className={styles.profile_transaction_history_table_head}>
-          <th>ID</th>
-          <th>Почта</th>
-          <th>Сумма</th>
-          <th>Дата</th>
-        </tr>
-        <div className={styles.profile_transaction_history_table_body}>
-          {/* {transactionHistory.map((transaction) => (
-            <div key={transaction.id}>
-              <p>{transaction.id}</p>
-              <p>{transaction.address}</p>
-              <p>
-                {transaction.amount}
-                <p
-                  style={{
-                    color:
-                      transaction.currency == "USDT"
-                        ? "#86C239"
-                        : transaction.currency == "BTC"
-                        ? "#e9a907"
-                        : "#1291d9",
-                  }}
-                >
-                  {transaction.currency}
-                </p>
-              </p>
-              <p>{transaction.date}</p>
-            </div>
-          ))} */}
-
-          {filteredData.length ? (
-            filteredData.map((transaction) => (
-              <div key={transaction.id}>
-                <p>{transaction.id}</p>
-                <p>
-                  {transaction.direction == "IN" ? (
-                    <GoArrowDownLeft />
-                  ) : (
-                    <GoArrowUpRight />
-                  )}
-
-                  {getTransactionTarget(transaction)}
-                </p>
-                <p>
-                  {transaction.amount}
-                  <p
-                    style={{
-                      color: getCurrencyColor(transaction.currency),
-                    }}
-                  >
-                    {transaction.currency}
-                  </p>
-                </p>
-                <p>{transaction.createdAt.split("T")[0]}</p>
-              </div>
-            ))
-          ) : (
-            <p>
-              {emptyText || (selectedCurrency === "ALL"
-                ? "Нет транзакций"
-                : `Нет транзакций по ${selectedCurrency}`)}
-            </p>
-          )}
-        </div>
-      </table>
-    </div>
-  );
-};
 
 const Action = ({ currency }) => {
   const [balance, setBalance] = React.useState(null);
   const [withdrawAddress, setWithdrawAddress] = React.useState("");
   const [withdrawAmount, setWithdrawAmount] = React.useState("");
   const [withdrawing, setWithdrawing] = React.useState(false);
+  const withdrawalKeyRef = React.useRef(null);
 
   const precision = currency === "BTC" || currency === "ETH" ? 8 : 2;
   const wallet = React.useMemo(() => {
     const wallets = Array.isArray(balance?.wallets) ? balance.wallets : [];
     return wallets.find((item) => String(item.currency).toUpperCase() === currency) || null;
   }, [balance, currency]);
-  const depositAddress = wallet?.address || "";
+  const network = getWalletNetwork(currency, wallet);
+  const depositsEnabled = wallet?.externalTransfers?.depositsEnabled === true;
+  const withdrawalsEnabled = wallet?.externalTransfers?.withdrawalsEnabled === true;
+  const unavailableReason = wallet?.externalTransfers?.reason || balance?.externalTransfers?.reason ||
+    "Операции через блокчейн временно недоступны";
+  const depositAddress = depositsEnabled ? wallet?.address || "" : "";
+  const networkLabel = `${network.network} · ${network.standard}`;
+  const minimumWithdrawalAmount = currency === "TRX" ? 1 : 0;
 
   React.useEffect(() => {
     api
@@ -809,18 +565,26 @@ const Action = ({ currency }) => {
       enqueueSnackbar("Укажите адрес вывода и сумму", { variant: "error" });
       return;
     }
+    if (minimumWithdrawalAmount > 0 && amount < minimumWithdrawalAmount) {
+      enqueueSnackbar(`Минимальная сумма вывода: ${minimumWithdrawalAmount} ${currency}`, { variant: "error" });
+      return;
+    }
 
     setWithdrawing(true);
+    withdrawalKeyRef.current ||= crypto.randomUUID();
     api
       .post(`/api/transactions/send`, {
         address: targetAddress,
         amount,
         currency,
+      }, {
+        headers: { "Idempotency-Key": withdrawalKeyRef.current },
       })
       .then(() => {
-        enqueueSnackbar("Заявка на вывод отправлена", { variant: "success" });
+        enqueueSnackbar("Транзакция отправлена в сеть TRON и ожидает подтверждения", { variant: "success" });
         setWithdrawAddress("");
         setWithdrawAmount("");
+        withdrawalKeyRef.current = null;
       })
       .catch((err) => {
         enqueueSnackbar(err.response?.data?.message || "Не удалось выполнить вывод", {
@@ -848,9 +612,10 @@ const Action = ({ currency }) => {
             {currency}
           </span>
         </div>
-        <select value={currency} onChange={() => {}}>
-          <option value={currency}>{currency}</option>
-        </select>
+        <div className={styles.profile_action_network}>
+          <span>Сеть</span>
+          <strong>{networkLabel}</strong>
+        </div>
       </div>
       <div className={styles.profile_action_wallet}>
         <div className={styles.profile_action_deposit}>
@@ -858,27 +623,87 @@ const Action = ({ currency }) => {
             <p>
               <BiWallet /> Адрес для ввода
             </p>
-            <strong>{currency}</strong>
+            <strong>{network.standard}</strong>
           </div>
-          <div className={styles.profile_action_address}>
-            <span>{depositAddress || "Адрес пока не создан"}</span>
-            <button type="button" onClick={copyDepositAddress} disabled={!depositAddress}>
-              <TbCopy />
-            </button>
+          <div className={styles.profile_action_networkBadge}>
+            <span>Поддерживаемая сеть</span>
+            <strong>{networkLabel}</strong>
           </div>
-          <div className={styles.profile_action_qr}>
-            {depositAddress ? (
-              <QRCode value={depositAddress} size={132} />
-            ) : (
-              <span>QR недоступен</span>
-            )}
-          </div>
-          <small>
-            Отправляйте только {currency} на этот адрес. Перевод другой сети или валюты может привести к потере средств.
-          </small>
+          {depositsEnabled ? (
+            <>
+              <p role="note">Минимум: эквивалент {balance?.depositPolicy?.minUsd||'5'} USDT. Комиссия: эквивалент {balance?.depositPolicy?.feeUsd??'2'} USDT с каждого пополнения, удерживается в валюте депозита после проверки. Другие валюты пересчитываются по курсу к USDT при зачислении. {currency==='BTC'?(wallet?.externalTransfers?.amlMode==='DISABLED'?'Bitcoin: зачисление после 6 подтверждений и сверки поступления. AML отключён — оценка риска не выполняется.':'Bitcoin: не менее 6 подтверждений, затем ручная AML-проверка с внешним отчётом. Мгновенное зачисление недоступно.'):'После подтверждения сети и AML-проверки: низкий риск может зачисляться автоматически, спорные поступления рассматривает администратор.'}</p>
+              <div className={styles.profile_action_address}>
+                <span>{depositAddress || "Адрес пока не создан"}</span>
+                <button type="button" onClick={copyDepositAddress} disabled={!depositAddress}>
+                  <TbCopy />
+                </button>
+              </div>
+              <div className={styles.profile_action_qr}>
+                {depositAddress ? (
+                  <QRCode value={depositAddress} size={132} />
+                ) : (
+                  <span>QR недоступен</span>
+                )}
+              </div>
+              <small>
+                Отправляйте только {currency} через {networkLabel}. Адрес должен иметь формат {network.addressFormat}.
+                {network.feeCurrency ? ` Для последующего вывода комиссия оплачивается в ${network.feeCurrency}.` : ""}
+              </small>
+            </>
+          ) : (
+            <div className={styles.profile_action_unavailable} role="status">
+              <strong>Ввод временно недоступен</strong>
+              <span>{unavailableReason}. Не отправляйте средства на ранее показанный адрес: баланс сайта не пополнится автоматически.</span>
+            </div>
+          )}
         </div>
 
-        <form className={styles.profile_action_withdraw} onSubmit={handleWithdraw}>
+        {['BTC','ETH'].includes(currency)&&withdrawalsEnabled ? <NativeWithdrawal key={currency} currency={currency}/> : withdrawalsEnabled ? (
+          <form className={styles.profile_action_withdraw} onSubmit={handleWithdraw}>
+            <div>
+              <p>
+                <GoArrowUpRight /> Вывод
+              </p>
+              <strong>
+                Доступно: {formatAssetAmount(wallet?.balance || 0, precision)} {currency}
+              </strong>
+            </div>
+            <div className={styles.profile_action_networkBadge}>
+              <span>Сеть вывода</span>
+              <strong>{networkLabel}</strong>
+            </div>
+            <label>
+              <span>Адрес кошелька для вывода</span>
+              <input
+                value={withdrawAddress}
+                placeholder={`${network.addressFormat} · ${networkLabel}`}
+                autoComplete="off"
+                onChange={(event) => setWithdrawAddress(event.target.value)}
+              />
+            </label>
+            <label>
+              <span>Сумма</span>
+              <NumericFormat
+                value={withdrawAmount}
+                thousandSeparator=" "
+                decimalSeparator=","
+                decimalScale={precision}
+                allowNegative={false}
+                placeholder="0"
+                onValueChange={(values) => setWithdrawAmount(values.value)}
+              />
+            </label>
+            {minimumWithdrawalAmount > 0 && (
+              <small className={styles.profile_action_withdrawHint}>
+                Минимальная сумма вывода: {minimumWithdrawalAmount} {currency}
+              </small>
+            )}
+            <button type="submit" disabled={withdrawing}>
+              {withdrawing ? "Отправляем..." : `Вывести ${currency}`}
+            </button>
+          </form>
+        ) : (
+          <div className={styles.profile_action_withdraw}>
           <div>
             <p>
               <GoArrowUpRight /> Вывод
@@ -887,31 +712,16 @@ const Action = ({ currency }) => {
               Доступно: {formatAssetAmount(wallet?.balance || 0, precision)} {currency}
             </strong>
           </div>
-          <label>
-            <span>Адрес кошелька для вывода</span>
-            <input
-              value={withdrawAddress}
-              placeholder={`Введите адрес ${currency}`}
-              autoComplete="off"
-              onChange={(event) => setWithdrawAddress(event.target.value)}
-            />
-          </label>
-          <label>
-            <span>Сумма</span>
-            <NumericFormat
-              value={withdrawAmount}
-              thousandSeparator=" "
-              decimalSeparator=","
-              decimalScale={precision}
-              allowNegative={false}
-              placeholder="0"
-              onValueChange={(values) => setWithdrawAmount(values.value)}
-            />
-          </label>
-          <button type="submit" disabled={withdrawing}>
-            {withdrawing ? "Отправляем..." : `Вывести ${currency}`}
-          </button>
-        </form>
+            <div className={styles.profile_action_networkBadge}>
+              <span>Сеть вывода</span>
+              <strong>{networkLabel}</strong>
+            </div>
+            <div className={styles.profile_action_unavailable} role="status">
+              <strong>Вывод временно недоступен</strong>
+              <span>{unavailableReason}. Средства нельзя отправить наружу через интерфейс сайта.</span>
+            </div>
+          </div>
+        )}
       </div>
       <div className={styles.profile_action_body}>
         <div>
@@ -1154,7 +964,7 @@ const PaymentMethods = () => {
             </div>
             <div className={styles.profile_payments_item_info}>
               <p>{wallet?.address}</p>
-              <p>Баланс: {formatAssetAmount(wallet?.balance, wallet.currency === "BTC" || wallet.currency === "ETH" ? 8 : 2)}</p>
+              <p>Баланс: {formatAssetAmount(wallet?.balance, walletPrecision[wallet.currency] || 8)}</p>
             </div>
             <div className={styles.profile_payments_item_action}></div>
           </div>
@@ -1364,7 +1174,7 @@ const navigationItems = [
     id: 2,
     key: "statistics",
     icon: <FaChartBar />,
-    page: <Info />,
+    page: <ProfileStats />,
   },
   {
     name: "История транзакций",
@@ -1381,7 +1191,7 @@ const navigationItems = [
     page: <PaymentMethods />,
   },
   {
-    name: "Реферальная системя",
+    name: "Реферальная система",
     icon: <BiGitBranch />,
     id: 5,
     key: "referral",

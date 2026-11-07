@@ -1,4 +1,5 @@
 .exchange {
+  width: 100%; max-width: 1440px; margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -23,8 +24,8 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   &_toolbar {
@@ -45,9 +46,9 @@
       color: var(--text-muted);
       background: #fff;
       border: 1px solid var(--border);
-      border-radius: 999px;
+      border-radius: 6px;
       font-size: 12px;
-      font-weight: 850;
+      font-weight: 600;
       text-align: center;
       cursor: pointer;
 
@@ -73,7 +74,7 @@
       border: 1px solid var(--border);
       border-radius: var(--radius-sm);
       font-size: 14px;
-      font-weight: 800;
+      font-weight: 600;
     }
   }
 
@@ -96,7 +97,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font-size: 13px;
-    font-weight: 850;
+    font-weight: 600;
 
     img {
       width: 16px;
@@ -105,13 +106,13 @@
 
     &_activeBuy {
       color: #fff;
-      background: var(--green-gradient);
+      background: var(--primary-deep);
       border: 0;
     }
 
     &_activeSell {
       color: #fff;
-      background: var(--red-gradient);
+      background: var(--danger);
       border: 0;
     }
   }
@@ -136,7 +137,7 @@
     p {
       color: var(--text-muted);
       font-size: 13px;
-      font-weight: 850;
+      font-weight: 600;
     }
   }
 
@@ -150,10 +151,10 @@
       min-height: 42px;
       padding: 0 14px;
       color: #fff;
-      background: var(--green-gradient);
+      background: var(--primary-deep);
       border-radius: var(--radius-sm);
       font-size: 13px;
-      font-weight: 850;
+      font-weight: 600;
       opacity: 0.72;
     }
   }
@@ -179,21 +180,21 @@
     padding: 0 12px;
     color: var(--text-muted);
     font-size: 12px;
-    font-weight: 850;
-    text-transform: uppercase;
+    font-weight: 600;
+    text-transform: none;
   }
 
   &_divider {
     height: 3px;
     width: 100%;
-    border-radius: 999px;
+    border-radius: 6px;
 
     &_buy {
-      background: var(--green-gradient);
+      background: var(--primary-deep);
     }
 
     &_sell {
-      background: var(--red-gradient);
+      background: var(--danger);
     }
   }
 
@@ -207,7 +208,7 @@
     background: #fff;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    box-shadow: 0 8px 20px rgba(32, 40, 32, 0.05);
+    box-shadow: none;
   }
 
   &_merchant,
@@ -219,7 +220,7 @@
     p {
       color: var(--text-dark);
       font-size: 14px;
-      font-weight: 850;
+      font-weight: 600;
     }
 
     span {
@@ -247,7 +248,7 @@
 
       &:last-child {
         color: var(--text-dark);
-        font-weight: 850;
+        font-weight: 600;
       }
     }
 
@@ -280,16 +281,16 @@
     color: #fff;
     border-radius: var(--radius-sm);
     font-size: 12px;
-    font-weight: 850;
+    font-weight: 600;
     white-space: nowrap;
   }
 
   &_buyButton {
-    background: var(--green-gradient);
+    background: var(--primary-deep);
   }
 
   &_sellButton {
-    background: var(--red-gradient);
+    background: var(--danger);
   }
 
   &_modalOverlay {
@@ -301,7 +302,7 @@
     justify-content: center;
     padding: 18px;
     background: rgba(11, 16, 10, 0.58);
-    backdrop-filter: blur(8px);
+    backdrop-filter: none;
   }
 
   &_modalBackdrop {
@@ -321,7 +322,7 @@
     background: #fff;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: 0 24px 80px rgba(0, 0, 0, 0.22);
+    box-shadow: none;
   }
 
   @media (max-width: 900px) {

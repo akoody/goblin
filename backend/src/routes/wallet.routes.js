@@ -14,15 +14,8 @@ router.get("/status", auth, async (req, res) => {
     res.json(wallets);
 });
 
-router.post("/deposit", auth, async (req, res) => {
-    const { currency, amount } = req.body;
-
-    try {
-        await deposit(req.user.user_id, currency, amount);
-        res.json({ success: true });
-    } catch (e) {
-        res.status(400).json({ success: false, message: e.message });
-    }
+router.post("/deposit", auth, (req, res) => {
+    res.status(403).json({message:'Ручное начисление запрещено. Депозиты учитываются только по подтверждённой блокчейн-транзакции после проверки.'});
 });
 
 router.post("/withdraw", auth, async (req, res) => {

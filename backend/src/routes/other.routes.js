@@ -1,21 +1,13 @@
 import express from "express";
 import {db} from "../config/db.js";
-import jwt from "jsonwebtoken";
 import { auth } from "./../middleware/auth.js";
 
 const router = express.Router();
 
 router.get('/me', auth, async (req, res) => {
-    const authHeader = req.headers.authorization;
-
-    if (!authHeader || !authHeader.startsWith("Bearer ")) return res.status(401).json({ message: "No token provided" });
-
-
-    const token = authHeader.split(" ")[1];
-
     try {
-        const decoded = jwt.verify(token, "dev-secret");
-        const userId = decoded.userId;
+        const userId = req.user?.userId;
+        if (!userId) return res.status(401).json({ message: "Unauthorized" });
 
         const [userRows] = await db.query("SELECT id, username, email, created_at FROM users WHERE id = ?", [userId]);
         if (userRows.length === 0) return res.status(404).json({ message: "User not found" });

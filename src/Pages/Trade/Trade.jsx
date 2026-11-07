@@ -1,58 +1,33 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { enqueueSnackbar } from "notistack";
 import { FiActivity, FiRefreshCw, FiShield, FiX } from "react-icons/fi";
 import { RiBtcLine } from "react-icons/ri";
 import { PiCurrencyEth } from "react-icons/pi";
 import api from "../../api";
 import styles from "./Trade.module.scss";
+import { useLocation, useNavigate } from "react-router-dom";
+import { PriceChart } from './PriceChart';
+import { OrderBook } from './OrderBook';
 
 const PAIRS = {
   "BTC-USDT": { base: "BTC", icon: <RiBtcLine />, precision: 6 },
   "ETH-USDT": { base: "ETH", icon: <PiCurrencyEth />, precision: 5 },
+  ...Object.fromEntries(['SOL','DOGE','SHIB','PEPE','BONK','WIF','FLOKI'].map(base=>[`${base}-USDT`,{base,icon:<FiActivity/>,precision:8}])),
 };
 const ACTIVE_STATUSES = new Set(["OPEN", "PARTIALLY_FILLED"]);
 
 const number = (value) => Number(value || 0);
-const format = (value, digits = 2) =>
+const format = (value, digits = number(value)!==0&&Math.abs(number(value))<1 ? 10 : 2) =>
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: digits }).format(number(value));
 const compact = (value) =>
   new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 2 }).format(number(value));
 const dateTime = (value) => value ? new Date(value).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—";
 
-const PriceChart = ({ candles = [], positive }) => {
-  const path = useMemo(() => {
-    if (candles.length < 2) return "";
-    const closes = candles.map((item) => number(item.close));
-    const min = Math.min(...closes);
-    const max = Math.max(...closes);
-    const range = max - min || 1;
-    return closes.map((price, index) => {
-      const x = (index / (closes.length - 1)) * 1000;
-      const y = 250 - ((price - min) / range) * 210;
-      return `${index ? "L" : "M"}${x.toFixed(2)},${y.toFixed(2)}`;
-    }).join(" ");
-  }, [candles]);
-  const area = path ? `${path} L1000,280 L0,280 Z` : "";
-
-  return (
-    <div className={styles.chart}>
-      <svg viewBox="0 0 1000 280" preserveAspectRatio="none" role="img" aria-label="График цены за 48 часов">
-        <defs>
-          <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0" stopColor={positive ? "#4ca11f" : "#d84a32"} stopOpacity=".28" />
-            <stop offset="1" stopColor={positive ? "#4ca11f" : "#d84a32"} stopOpacity="0" />
-          </linearGradient>
-        </defs>
-        {[55, 110, 165, 220].map((y) => <line key={y} x1="0" y1={y} x2="1000" y2={y} />)}
-        {area && <path d={area} fill="url(#chartFill)" />}
-        {path && <path d={path} className={positive ? styles.chart_up : styles.chart_down} />}
-      </svg>
-      {!path && <div className={styles.empty}>График загружается…</div>}
-    </div>
-  );
-};
-
 export const Trade = () => {
+  const isLoggedIn = Boolean(localStorage.getItem("token"));
+  const navigate = useNavigate();
+  const location = useLocation();
+  const login = () => navigate("/login", { state: { from: location } });
   const [market, setMarket] = useState("SPOT");
   const [symbol, setSymbol] = useState("BTC-USDT");
   const [snapshot, setSnapshot] = useState(null);
@@ -61,9 +36,11 @@ export const Trade = () => {
   const [orderType, setOrderType] = useState("LIMIT");
   const [price, setPrice] = useState("");
   const [quantity, setQuantity] = useState("");
+  const [selectedPrice, setSelectedPrice] = useState('');
   const [leverage, setLeverage] = useState(5);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const orderPanelRef = useRef(null);
   const pair = PAIRS[symbol];
 
   const load = useCallback(async (quiet = false) => {
@@ -71,21 +48,21 @@ export const Trade = () => {
     try {
       const [marketResponse, stateResponse] = await Promise.all([
         api.get(`/exchange/market/${symbol}`),
-        api.get("/exchange/state", { params: { market, symbol } }),
+        isLoggedIn ? api.get("/exchange/state", { params: { market, symbol } }) : Promise.resolve(null),
       ]);
       setSnapshot(marketResponse.data);
-      setState(stateResponse.data);
+      if (stateResponse) setState(stateResponse.data);
       setPrice((current) => current || String(Number(marketResponse.data.price).toFixed(2)));
     } catch (error) {
       if (!quiet) enqueueSnackbar(error.response?.data?.message || "Не удалось загрузить рынок", { variant: "error" });
     } finally {
       if (!quiet) setLoading(false);
     }
-  }, [market, symbol]);
+  }, [market, symbol, isLoggedIn]);
 
   useEffect(() => {
     document.title = `${pair.base}/USDT — Торговля Goblin`;
-    setPrice(""); setQuantity("");
+    setPrice(""); setQuantity(""); setSelectedPrice('');
     load();
     const timer = window.setInterval(() => load(true), 7000);
     return () => window.clearInterval(timer);
@@ -100,6 +77,7 @@ export const Trade = () => {
 
   const submit = async (event) => {
     event.preventDefault();
+    if (!isLoggedIn) { login(); return; }
     if (!number(quantity) || (orderType === "LIMIT" && !number(price))) {
       enqueueSnackbar("Укажите корректную цену и количество", { variant: "warning" }); return;
     }
@@ -141,6 +119,16 @@ export const Trade = () => {
     setQuantity(String((maxQuantity * percent).toFixed(pair.precision)));
   };
 
+  const selectBookPrice = (bookPrice) => {
+    if (!Number.isFinite(Number(bookPrice)) || Number(bookPrice) <= 0) return;
+    setPrice(String(bookPrice));
+    setSelectedPrice(String(bookPrice));
+    setOrderType("LIMIT");
+    if (window.matchMedia("(max-width: 800px)").matches) {
+      window.requestAnimationFrame(() => orderPanelRef.current?.scrollIntoView({ behavior: "smooth", block: "center" }));
+    }
+  };
+
   const openOrders = state.orders.filter((order) => ACTIVE_STATUSES.has(order.status));
   return (
     <main className={styles.trade}>
@@ -153,18 +141,14 @@ export const Trade = () => {
           ))}
         </div>
         <div className={styles.pairs}>
-          {Object.entries(PAIRS).map(([key, value]) => (
-            <button key={key} className={symbol === key ? styles.activePair : ""} onClick={() => setSymbol(key)}>
-              <span>{value.icon}</span>{value.base}/USDT
-            </button>
-          ))}
+          <label>Торговая пара <select value={symbol} onChange={e=>setSymbol(e.target.value)}>{Object.entries(PAIRS).map(([key,value])=><option key={key} value={key}>{value.base}/USDT</option>)}</select></label>
         </div>
         <button className={styles.refresh} onClick={() => load()} aria-label="Обновить рынок"><FiRefreshCw /></button>
       </section>
 
       <section className={styles.ticker}>
         <div className={styles.asset}><span>{pair.icon}</span><div><strong>{pair.base}/USDT</strong><small>{market === "SPOT" ? "Спотовый рынок" : "Бессрочный контракт"}</small></div></div>
-        <div><small>Последняя цена</small><strong className={positive ? styles.green : styles.red}>{format(snapshot?.price, 2)} USDT</strong></div>
+        <div><small>Последняя цена</small><strong className={positive ? styles.green : styles.red}>{format(snapshot?.price)} USDT</strong></div>
         <div><small>24ч изменение</small><strong className={positive ? styles.green : styles.red}>{positive ? "+" : ""}{format(snapshot?.change24h, 2)}%</strong></div>
         <div><small>Максимум 24ч</small><strong>{format(snapshot?.high24h, 2)}</strong></div>
         <div><small>Минимум 24ч</small><strong>{format(snapshot?.low24h, 2)}</strong></div>
@@ -175,33 +159,25 @@ export const Trade = () => {
       <section className={styles.workspace}>
         <div className={styles.chartPanel}>
           <div className={styles.panelTitle}><div><small>График</small><h2>{pair.base}/USDT · 1ч</h2></div><span>48 часов</span></div>
-          <PriceChart candles={snapshot?.candles} positive={positive} />
+          <PriceChart key={`${market}-${symbol}`} candles={snapshot?.candles} positive={positive} onSelectPrice={selectBookPrice} />
         </div>
 
-        <div className={styles.bookPanel}>
-          <div className={styles.panelTitle}><div><small>Рынок</small><h2>Стакан</h2></div><span>{pair.base}</span></div>
-          <div className={styles.bookHead}><span>Цена USDT</span><span>Количество</span></div>
-          <div className={styles.bookRows}>
-            {[...(state.book.asks || [])].reverse().slice(-8).map((row) => <div key={`a-${row.price}`} className={styles.ask}><span>{format(row.price, 2)}</span><b>{format(row.quantity, pair.precision)}</b></div>)}
-            <div className={styles.mid}><strong>{format(snapshot?.price, 2)}</strong><span>≈ ${format(snapshot?.price, 2)}</span></div>
-            {(state.book.bids || []).slice(0, 8).map((row) => <div key={`b-${row.price}`} className={styles.bid}><span>{format(row.price, 2)}</span><b>{format(row.quantity, pair.precision)}</b></div>)}
-          </div>
-          {!state.book.asks?.length && !state.book.bids?.length && <p className={styles.bookEmpty}>Стакан пуст. Первый лимитный ордер создаст ликвидность.</p>}
-        </div>
+        <OrderBook key={`${market}-${symbol}`} snapshot={snapshot} base={pair.base} onSelectPrice={selectBookPrice} selectedPrice={orderType === "LIMIT" ? price : null} />
 
-        <form className={styles.orderPanel} onSubmit={submit}>
+        <form ref={orderPanelRef} className={styles.orderPanel} onSubmit={submit}>
           <div className={styles.sideTabs}>
             <button type="button" className={side === "BUY" ? styles.buyActive : ""} onClick={() => setSide("BUY")}>{market === "FUTURES" ? "Лонг" : "Купить"}</button>
             <button type="button" className={side === "SELL" ? styles.sellActive : ""} onClick={() => setSide("SELL")}>{market === "FUTURES" ? "Шорт" : "Продать"}</button>
           </div>
           <div className={styles.typeTabs}>{["LIMIT", "MARKET"].map((item) => <button type="button" key={item} className={orderType === item ? styles.typeActive : ""} onClick={() => setOrderType(item)}>{item === "LIMIT" ? "Лимит" : "Рынок"}</button>)}</div>
-          <div className={styles.balanceLine}><span>Доступно</span><strong>{format(available, market === "FUTURES" || side === "BUY" ? 2 : 8)} {market === "FUTURES" || side === "BUY" ? "USDT" : pair.base}</strong></div>
-          {orderType === "LIMIT" && <label><span>Цена</span><div><input value={price} onChange={(e) => setPrice(e.target.value)} inputMode="decimal" placeholder="0.00" /><b>USDT</b></div></label>}
+          <div className={styles.balanceLine}><span>Доступно</span><strong>{isLoggedIn ? `${format(available, market === "FUTURES" || side === "BUY" ? 2 : 8)} ${market === "FUTURES" || side === "BUY" ? "USDT" : pair.base}` : "Войдите в аккаунт"}</strong></div>
+          {orderType === "LIMIT" && <label><span>Цена</span><div><input aria-label="Цена ордера" value={price} onChange={(e) => { setPrice(e.target.value); setSelectedPrice(''); }} inputMode="decimal" placeholder="0.00" /><b>USDT</b></div></label>}
+          {selectedPrice && orderType === 'LIMIT' && <p className={styles.priceSelected} role='status'>Цена {format(selectedPrice,8)} USDT подставлена в ордер</p>}
           <label><span>Количество</span><div><input value={quantity} onChange={(e) => setQuantity(e.target.value)} inputMode="decimal" placeholder="0.00" /><b>{pair.base}</b></div></label>
           <div className={styles.percent}>{[.25,.5,.75,1].map((item) => <button type="button" key={item} onClick={() => setPercent(item)}>{item * 100}%</button>)}</div>
           {market === "FUTURES" && <label><span>Кредитное плечо <b>{leverage}×</b></span><input className={styles.range} type="range" min="1" max="20" value={leverage} onChange={(e) => setLeverage(Number(e.target.value))} /></label>}
           <div className={styles.summary}><span>{market === "FUTURES" ? "Начальная маржа" : "Итого"}</span><strong>{format(required, 2)} {market === "SPOT" && side === "SELL" ? pair.base : "USDT"}</strong></div>
-          <button className={side === "BUY" ? styles.buyButton : styles.sellButton} disabled={submitting || loading}>{submitting ? "Отправляем…" : `${side === "BUY" ? market === "FUTURES" ? "Открыть лонг" : "Купить" : market === "FUTURES" ? "Открыть шорт" : "Продать"} ${pair.base}`}</button>
+          <button className={side === "BUY" ? styles.buyButton : styles.sellButton} disabled={submitting || (isLoggedIn && loading)}>{!isLoggedIn ? "Войти для торговли" : submitting ? "Отправляем…" : `${side === "BUY" ? market === "FUTURES" ? "Открыть лонг" : "Купить" : market === "FUTURES" ? "Открыть шорт" : "Продать"} ${pair.base}`}</button>
           <p className={styles.risk}><FiShield /> Рыночный ордер исполняется полностью или отменяется. Self-trade запрещён.</p>
         </form>
       </section>
@@ -212,13 +188,12 @@ export const Trade = () => {
           {state.positions.filter((p) => p.status === "OPEN").map((position) => {
             const mark = number(snapshot?.price); const entry = number(position.entry_price);
             const pnl = (position.side === "LONG" ? mark - entry : entry - mark) * number(position.quantity);
-            return <article key={position.id}><div><span className={position.side === "LONG" ? styles.long : styles.short}>{position.side === "LONG" ? "Лонг" : "Шорт"} {position.leverage}×</span><strong>{format(position.quantity, pair.precision)} {pair.base}</strong></div><div><small>Вход / Mark</small><b>{format(entry, 2)} / {format(mark, 2)}</b></div><div><small>Нереализованный PnL</small><b className={pnl >= 0 ? styles.green : styles.red}>{pnl >= 0 ? "+" : ""}{format(pnl, 2)} USDT</b></div><div><small>Ликвидация</small><b>{format(position.liquidation_price, 2)}</b></div><button onClick={() => closePosition(position.id)}>Закрыть по рынку</button></article>;
+            return <article key={position.id}><div><span className={position.side === "LONG" ? styles.long : styles.short}>{position.side === "LONG" ? "Лонг" : "Шорт"} {position.leverage}×</span><strong>{format(position.quantity, pair.precision)} {pair.base}</strong></div><div><small>Вход / Mark</small><b>{format(entry)} / {format(mark)}</b></div><div><small>Нереализованный PnL</small><b className={pnl >= 0 ? styles.green : styles.red}>{pnl >= 0 ? "+" : ""}{format(pnl, 2)} USDT</b></div><div><small>Ликвидация</small><b>{format(position.liquidation_price)}</b></div><button onClick={() => closePosition(position.id)}>Закрыть по рынку</button></article>;
           })}
         </div>}
-        <div className={styles.tableWrap}><table><thead><tr><th>Дата</th><th>Пара</th><th>Сторона</th><th>Тип</th><th>Цена</th><th>Исполнено</th><th>Статус</th><th></th></tr></thead><tbody>
-          {state.orders.map((order) => <tr key={order.id}><td>{dateTime(order.created_at)}</td><td>{order.symbol.replace("-", "/")}</td><td className={order.side === "BUY" ? styles.green : styles.red}>{order.side === "BUY" ? "Покупка" : "Продажа"}</td><td>{order.order_type === "LIMIT" ? "Лимит" : "Рынок"}</td><td>{format(order.price, 2)}</td><td>{format(order.filled_quantity, pair.precision)} / {format(order.quantity, pair.precision)}</td><td><span className={styles.status}>{order.status}</span></td><td>{ACTIVE_STATUSES.has(order.status) && <button className={styles.cancel} onClick={() => cancel(order.id)} aria-label="Отменить ордер"><FiX /></button>}</td></tr>)}
-          {!state.orders.length && <tr><td colSpan="8"><div className={styles.empty}>Здесь появятся ваши торговые ордера</div></td></tr>}
-        </tbody></table></div>
+        {state.orders.length > 0 ? <div className={styles.tableWrap}><table><thead><tr><th>Дата</th><th>Пара</th><th>Сторона</th><th>Тип</th><th>Цена</th><th>Исполнено</th><th>Статус</th><th></th></tr></thead><tbody>
+          {state.orders.map((order) => <tr key={order.id}><td>{dateTime(order.created_at)}</td><td>{order.symbol.replace("-", "/")}</td><td className={order.side === "BUY" ? styles.green : styles.red}>{order.side === "BUY" ? "Покупка" : "Продажа"}</td><td>{order.order_type === "LIMIT" ? "Лимит" : "Рынок"}</td><td>{format(order.price)}</td><td>{format(order.filled_quantity, pair.precision)} / {format(order.quantity, pair.precision)}</td><td><span className={styles.status}>{order.status}</span></td><td>{ACTIVE_STATUSES.has(order.status) && <button className={styles.cancel} onClick={() => cancel(order.id)} aria-label="Отменить ордер"><FiX /></button>}</td></tr>)}
+        </tbody></table></div> : <div className={styles.empty}>{isLoggedIn ? "Здесь появятся ваши торговые ордера" : "Войдите в аккаунт, чтобы увидеть свои ордера"}</div>}
       </section>
     </main>
   );

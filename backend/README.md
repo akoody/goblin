@@ -19,3 +19,16 @@
 Поддерживаются пары BTC/USDT и ETH/USDT. Лимитные ордера исполняются с приоритетом цены и времени и допускают частичное исполнение. Рыночные ордера используют модель fill-or-kill. Для фьючерсов реализован one-way mode с плечом от 1x до 20x, резервированием маржи и периодической проверкой ликвидационных порогов.
 
 Согласованность операций обеспечивается транзакциями MySQL, блокировками строк и advisory lock на комбинацию рынка и торговой пары.
+
+## Восстановление пароля
+
+Маршруты `POST /auth/password-reset/request` и `POST /auth/password-reset/confirm` отправляют одноразовый шестизначный код на email пользователя через Resend Email API. Добавьте домен отправителя в Resend, подтвердите его DNS-записями из панели сервиса и добавьте в `backend/.env`:
+
+```env
+RESEND_API_KEY=re_xxxxxxxxx
+EMAIL_FROM=CryptoGoblin <no-reply@cryptogoblin.ru>
+APP_URL=https://cryptogoblin.ru
+PASSWORD_RESET_SECRET=long-random-secret
+```
+
+После добавления миграции `008_password_resets.sql` выполните `npm run migrate` и перезапустите backend. Для отправки с адреса на `cryptogoblin.ru` домен должен быть подтверждён в Resend.

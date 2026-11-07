@@ -1,4 +1,5 @@
 .support {
+  width: 100%; max-width: 1440px; margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 20px;
@@ -36,8 +37,8 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
   }
 
   &_sidebar {
@@ -82,11 +83,11 @@
     background: #fff;
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    box-shadow: 0 8px 20px rgba(32, 40, 32, 0.05);
+    box-shadow: none;
 
     &_active {
       border-color: rgba(76, 161, 31, 0.42);
-      box-shadow: var(--shadow-card);
+      box-shadow: none;
     }
 
     > p {
@@ -123,7 +124,7 @@
       gap: 4px;
       color: var(--primary-deep);
       font-size: 12px;
-      font-weight: 850;
+      font-weight: 600;
     }
   }
 
@@ -131,9 +132,9 @@
   &_statusWaiting {
     width: fit-content;
     padding: 5px 8px;
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 11px;
-    font-weight: 850;
+    font-weight: 600;
   }
 
   &_unread {
@@ -147,10 +148,10 @@
     height: 22px;
     padding: 0 7px;
     color: #fff;
-    background: var(--green-gradient);
-    border-radius: 999px;
+    background: var(--primary-deep);
+    border-radius: 6px;
     font-size: 11px;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   &_statusOnline {
@@ -175,7 +176,7 @@
     flex: 1;
     color: var(--text-muted);
     font-size: 18px;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &_emptySmall {
@@ -183,7 +184,7 @@
     color: var(--text-muted);
     text-align: center;
     font-size: 14px;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &_chatHeader {
@@ -198,7 +199,7 @@
 
     h2 {
       font-size: 20px;
-      font-weight: 850;
+      font-weight: 600;
     }
 
     p {
@@ -221,11 +222,11 @@
         border: 1px solid var(--border);
         border-radius: var(--radius-sm);
         font-size: 12px;
-        font-weight: 850;
+        font-weight: 600;
 
         &:last-child {
           color: #fff;
-          background: var(--green-gradient);
+          background: var(--primary-deep);
           border: 0;
         }
       }
@@ -240,9 +241,7 @@
     min-height: 0;
     padding: 18px;
     overflow-y: auto;
-    background:
-      linear-gradient(180deg, rgba(234, 245, 223, 0.42), transparent 220px),
-      rgba(255, 255, 255, 0.46);
+    background: var(--surface-solid);
   }
 
   &_messageClient,
@@ -250,7 +249,7 @@
     max-width: min(62%, 560px);
     padding: 12px 14px;
     border: 1px solid var(--border);
-    box-shadow: 0 8px 20px rgba(32, 40, 32, 0.05);
+    box-shadow: none;
 
     p {
       font-size: 14px;
@@ -269,7 +268,7 @@
   &_messageClient {
     align-self: flex-start;
     background: #fff;
-    border-radius: 14px 14px 14px 4px;
+    border-radius: 8px 14px 14px 4px;
   }
 
   &_messageOperator {
@@ -277,7 +276,7 @@
     color: #14340e;
     background: #e6f5dc;
     border-color: rgba(76, 161, 31, 0.16);
-    border-radius: 14px 14px 4px 14px;
+    border-radius: 8px 14px 4px 14px;
   }
 
   &_composer {
@@ -294,7 +293,7 @@
     border: 1px solid rgba(233, 169, 7, 0.2);
     border-radius: var(--radius-sm);
     font-size: 13px;
-    font-weight: 800;
+    font-weight: 600;
   }
 
   &_files {
@@ -339,7 +338,7 @@
 
       &:last-child {
         color: #fff;
-        background: var(--green-gradient);
+        background: var(--primary-deep);
       }
 
       &:disabled {
@@ -368,7 +367,7 @@
     place-items: center;
     padding: 20px;
     background: rgba(17, 22, 17, 0.32);
-    backdrop-filter: blur(8px);
+    backdrop-filter: none;
   }
 
   &_modal {
@@ -379,7 +378,7 @@
     background: #fff;
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-card);
+    box-shadow: none;
 
     input,
     select,
@@ -406,7 +405,7 @@
 
     h2 {
       font-size: 22px;
-      font-weight: 900;
+      font-weight: 600;
     }
 
     button {

@@ -1,0 +1,24 @@
+import express from 'express';
+import Decimal from 'decimal.js';
+import {auth} from '../middleware/auth.js';
+import {db} from '../config/db.js';
+import {transact} from '../services/commerce.service.js';
+import {staffAccess} from '../services/staff-access.service.js';
+import {createRateLimit} from '../middleware/rate-limit.js';
+import {tronSwapState,quoteTronSwap,reserveTronSwap} from '../services/tron-swap.service.js';
+import {tronSwapReady,swapAmount} from '../services/tron-swap-client.js';
+const router=express.Router();router.use(auth);
+const handle=fn=>async(req,res)=>{try{res.set('Cache-Control','no-store').json(await fn(req));}catch(e){res.status(e.status||400).json({message:e.status?e.message:'Операция TRON недоступна. Проверьте сумму, кошелёк и доступность сети.'});}};
+router.get('/state',handle(req=>tronSwapState(req.user.userId)));
+router.post('/quote',createRateLimit({windowMs:60000,max:10,message:'Слишком много котировок'}),handle(req=>quoteTronSwap(req.user.userId,req.body)));
+router.post('/:id/execute',createRateLimit({windowMs:60000,max:10,message:'Слишком много операций'}),handle(req=>reserveTronSwap(req.user.userId,req.params.id)));
+router.use('/admin',async(req,res,next)=>{try{if((await staffAccess(req.user.userId)).role!=='admin')return res.status(403).json({message:'Только для администратора'});next();}catch{res.status(500).json({message:'Не удалось проверить права'});}});
+router.get('/admin/policy',handle(async()=>{const [[policy]]=await db.query('SELECT * FROM tron_swap_policy WHERE id=1');return {...policy,enabled:Boolean(policy.enabled),signingConfigured:tronSwapReady()};}));
+router.post('/admin/policy',handle(async req=>{
+ const minimumTrx=swapAmount(req.body.minimumTrx),minimumUsdt=swapAmount(req.body.minimumUsdt),budget=swapAmount(req.body.feeBudgetTrx);
+ if(typeof req.body.enabled!=='boolean'||new Decimal(budget).lt(3)||new Decimal(budget).gt(1000))throw Object.assign(new Error('Сетевой бюджет должен быть от 3 до 1000 TRX'),{status:400});
+ if(req.body.enabled&&!tronSwapReady())throw Object.assign(new Error('Отправка TRON пока не активирована на сервере'),{status:409});
+ await transact(async c=>{await c.query('SELECT id FROM tron_swap_policy WHERE id=1 FOR UPDATE');await c.execute('UPDATE tron_swap_policy SET minimum_trx=?,minimum_usdt=?,fee_budget_trx=?,enabled=?,updated_by=? WHERE id=1',[minimumTrx,minimumUsdt,budget,req.body.enabled?1:0,req.user.userId]);await c.execute('INSERT INTO tron_swap_policy_audit(actor_id,policy_json) VALUES(?,?)',[req.user.userId,JSON.stringify(req.body)]);});return {success:true};
+}));
+router.get('/admin/review',handle(async()=>{const [rows]=await db.query("SELECT id,user_id,input_currency,input_amount,status,error_code FROM tron_swaps WHERE status='review' ORDER BY created_at LIMIT 100");return rows;}));
+export default router;

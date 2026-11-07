@@ -477,7 +477,7 @@ export async function getExchangeState(userId, market, symbol) {
     ),
     db.execute(
       `SELECT currency, balance, locked_balance, balance - locked_balance AS available
-       FROM wallets WHERE user_id = ? AND currency IN ('BTC','ETH','USDT')`, [userId]
+       FROM wallets WHERE user_id = ? AND currency IN (?,?,'USDT')`, [userId,parts(normalizedSymbol)[0],parts(normalizedSymbol)[1]]
     ),
     normalizedMarket === "FUTURES"
       ? db.execute(`SELECT * FROM futures_positions WHERE user_id = ? AND symbol = ? ORDER BY created_at DESC`, [userId, normalizedSymbol])

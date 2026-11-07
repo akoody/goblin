@@ -167,6 +167,18 @@ export const Deal = () => {
                 {formatMoney(cryptoAmount, "USDT")}
               </p>
             </section>
+            {Number(deal.p2p_fee_percent) > 0 && (
+              <>
+                <section className={styles.myOrders_content_item_section}>
+                  <span className="span">Комиссия P2P ({deal.p2p_fee_percent}%)</span>
+                  <p className="p">{formatMoney(deal.p2p_fee_amount, "USDT")}</p>
+                </section>
+                <section className={styles.myOrders_content_item_section}>
+                  <span className="span">Покупатель получит после комиссии</span>
+                  <p className="p" style={{ fontWeight: "600" }}>{formatMoney(deal.p2p_net_amount, "USDT")}</p>
+                </section>
+              </>
+            )}
             <section className={styles.myOrders_content_item_section}>
               <span className="span">Цена</span>
               <p className="p">{formatMoney(dealPrice)}</p>

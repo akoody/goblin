@@ -1,7 +1,33 @@
 import bcrypt from "bcryptjs";
 import { db } from "../config/db.js";
-import jwt from "jsonwebtoken";
+import { signAccessToken } from "../config/jwt.js";
 import { generateUserWallets } from "./wallet-generator.service.js";
+import { recordLoginIp } from "./login-ip.service.js";
+
+const createUserWallets = async (connection, userId) => {
+    const { btc, eth, usdt, trx } = generateUserWallets(userId);
+
+    await connection.query(
+        `INSERT INTO wallets (user_id, currency, balance, address, private_key)
+         VALUES (?, 'BTC', 0, ?, ?),
+                (?, 'ETH', 0, ?, ?),
+                (?, 'USDT', 0, ?, ?),
+                (?, 'TRX', 0, ?, ?)`,
+        [
+            userId, btc.address, btc.privateKey,
+            userId, eth.address, eth.privateKey,
+            userId, usdt.address, usdt.privateKey,
+            userId, trx.address, trx.privateKey,
+        ]
+    );
+
+    return {
+        btcAddress: btc.address,
+        ethAddress: eth.address,
+        usdtAddress: usdt.address,
+        trxAddress: trx.address,
+    };
+};
 
 export async function registerUser(username, email, password) {
     const connection = await db.getConnection();
@@ -27,30 +53,13 @@ export async function registerUser(username, email, password) {
 
         const userId = result.insertId;
 
-        const { btc: btcWallet, eth: ethWallet, usdt: usdtWallet } = generateUserWallets(userId);
-
-        await connection.query(
-            "INSERT INTO wallets (user_id, currency, balance, address, private_key) VALUES (?, 'BTC', 0, ?, ?), (?, 'ETH', 0, ?, ?), (?, 'USDT', 0, ?, ?)",
-            [
-                userId,
-                btcWallet.address,
-                btcWallet.privateKey,
-                userId,
-                ethWallet.address,
-                ethWallet.privateKey,
-                userId,
-                usdtWallet.address,
-                usdtWallet.privateKey,
-            ]
-        );
+        const walletAddresses = await createUserWallets(connection, userId);
 
         await connection.commit();
 
         return {
             userId,
-            btcAddress: btcWallet.address,
-            ethAddress: ethWallet.address,
-            usdtAddress: usdtWallet.address,
+            ...walletAddresses,
         };
     } catch (err) {
         await connection.rollback();
@@ -68,7 +77,7 @@ export async function registerUser(username, email, password) {
             throw new Error("Wallet address already exists. Please try again");
         }
 
-        throw new Error("Failed to create BTC/ETH/USDT wallets");
+        throw new Error("Failed to create BTC/ETH/USDT/TRX wallets");
     } finally {
         connection.release();
     }
@@ -116,31 +125,14 @@ export async function registerUserWithReferral(username, email, password, referr
         const referral = `GBL${Number(userId).toString(36).toUpperCase().padStart(6, "0")}`;
         await connection.query("UPDATE users SET referral_code = ? WHERE id = ?", [referral, userId]);
 
-        const { btc: btcWallet, eth: ethWallet, usdt: usdtWallet } = generateUserWallets(userId);
-
-        await connection.query(
-            "INSERT INTO wallets (user_id, currency, balance, address, private_key) VALUES (?, 'BTC', 0, ?, ?), (?, 'ETH', 0, ?, ?), (?, 'USDT', 0, ?, ?)",
-            [
-                userId,
-                btcWallet.address,
-                btcWallet.privateKey,
-                userId,
-                ethWallet.address,
-                ethWallet.privateKey,
-                userId,
-                usdtWallet.address,
-                usdtWallet.privateKey,
-            ]
-        );
+        const walletAddresses = await createUserWallets(connection, userId);
 
         await connection.commit();
 
         return {
             userId,
             referral,
-            btcAddress: btcWallet.address,
-            ethAddress: ethWallet.address,
-            usdtAddress: usdtWallet.address,
+            ...walletAddresses,
         };
     } catch (err) {
         await connection.rollback();
@@ -158,7 +150,7 @@ export async function registerUserWithReferral(username, email, password, referr
             throw new Error("User or wallet already exists. Please try again");
         }
 
-        throw new Error("Failed to create account");
+        throw new Error("Failed to create account and wallets");
     } finally {
         connection.release();
     }
@@ -179,16 +171,16 @@ export async function getMe(username, password) {
 
     if (!valid) throw new Error("Invalid credentials");
 
-    const payload = { userId: user.id, username: user.username };
-    const token = jwt.sign(payload, 'dev-secret', { expiresIn: '7d' });
+    const payload = { userId: user.id, username: user.username, tokenVersion: Number(user.token_version || 0) };
+    const token = signAccessToken(payload);
 
     return token;
 }
 
-export async function loginUser(username, password) {
+export async function loginUser(username, password, context) {
     const [rows] = await db.query(
-        "SELECT * FROM users WHERE username = ? AND COALESCE(status, 'active') = 'active'",
-        [username]
+        "SELECT * FROM users WHERE (username = ? OR LOWER(email) = LOWER(?)) AND COALESCE(status, 'active') = 'active' ORDER BY (username = ?) DESC LIMIT 1",
+        [username, username, username]
     );
 
     if (rows.length === 0) {
@@ -200,8 +192,9 @@ export async function loginUser(username, password) {
 
     if (!valid) throw new Error("Invalid credentials");
 
-    const payload = { userId: user.id, username: user.username };
-    const token = jwt.sign(payload, 'dev-secret', { expiresIn: '7d' });
+    await recordLoginIp(db, user.id, context);
+    const payload = { userId: user.id, username: user.username, tokenVersion: Number(user.token_version || 0) };
+    const token = signAccessToken(payload);
 
     return token;
 }

@@ -1,4 +1,5 @@
 .nft {
+  width: 100%; max-width: 1440px; margin-inline: auto;
   display: grid;
   gap: 20px;
   width: 100%;
@@ -12,18 +13,16 @@
     align-items: center;
     padding: clamp(20px, 4vw, 38px);
     overflow: hidden;
-    background:
-      radial-gradient(circle at 84% 10%, rgba(179, 221, 37, 0.34), transparent 18rem),
-      linear-gradient(135deg, rgba(255, 255, 255, 0.94), rgba(239, 247, 232, 0.88));
+    background: var(--surface-solid);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
+    box-shadow: none;
 
     h1 {
       margin: 12px 0 8px;
       color: var(--text-dark);
       font-size: clamp(28px, 4vw, 46px);
-      font-weight: 950;
+      font-weight: 600;
       line-height: 105%;
     }
 
@@ -44,9 +43,9 @@
     width: fit-content;
     color: var(--primary-deep);
     background: var(--primary-soft);
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 600;
   }
 
   &_eyebrow { padding: 7px 10px; }
@@ -57,14 +56,14 @@
     gap: 8px;
     padding: 20px;
     color: #fff;
-    background: var(--green-gradient);
+    background: var(--primary-deep);
     border-radius: var(--radius-md);
-    box-shadow: 0 18px 38px rgba(42, 99, 20, 0.2);
+    box-shadow: none;
 
-    span { font-size: 12px; font-weight: 800; opacity: .82; }
-    strong { font-size: 28px; font-weight: 950; }
+    span { font-size: 12px; font-weight: 600; opacity: .82; }
+    strong { font-size: 28px; font-weight: 600; }
     small { font-size: 13px; opacity: .8; }
-    a { width: fit-content; margin-top: 4px; color: #fff; font-size: 12px; font-weight: 850; text-decoration: underline; text-underline-offset: 3px; }
+    a { width: fit-content; margin-top: 4px; color: #fff; font-size: 12px; font-weight: 600; text-decoration: underline; text-underline-offset: 3px; }
   }
 
   &_stats {
@@ -82,11 +81,11 @@
       background: var(--surface);
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      box-shadow: var(--shadow-card);
+      box-shadow: none;
 
       svg { grid-row: span 2; color: var(--primary); font-size: 21px; }
-      span { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 11px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
-      strong { color: var(--text-dark); font-size: 20px; font-weight: 950; }
+      span { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+      strong { color: var(--text-dark); font-size: 20px; font-weight: 600; }
     }
   }
 
@@ -120,7 +119,7 @@
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     font-size: 13px;
-    font-weight: 850;
+    font-weight: 600;
     white-space: nowrap;
     transition: .18s ease;
 
@@ -143,7 +142,7 @@
     padding: 0 5px;
     color: #fff;
     background: var(--primary-deep);
-    border-radius: 999px;
+    border-radius: 6px;
     font-size: 10px;
   }
 
@@ -157,7 +156,7 @@
     background: rgba(255, 255, 255, .64);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
+    box-shadow: none;
   }
 
   &_filters { display: flex; align-items: center; gap: 12px; min-width: 0; }
@@ -195,10 +194,10 @@
     background: rgba(255, 255, 255, .95);
     border: 1px solid var(--border);
     border-radius: var(--radius-md);
-    box-shadow: 0 10px 22px rgba(32, 40, 32, .05);
+    box-shadow: none;
     transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease;
 
-    &:hover { border-color: rgba(76, 161, 31, .34); box-shadow: var(--shadow-card); transform: translateY(-2px); }
+    &:hover { border-color: rgba(76, 161, 31, .34); box-shadow: none; transform: none; }
   }
 
   &_visual {
@@ -220,16 +219,16 @@
     }
 
     b { position: relative; z-index: 1; font-size: 76px; font-family: sans-serif; line-height: 1; filter: drop-shadow(0 12px 10px color-mix(in srgb, var(--gift-accent) 32%, transparent)); }
-    small { position: absolute; right: 10px; bottom: 10px; z-index: 1; padding: 5px 7px; color: var(--text-dark); background: rgba(255, 255, 255, .76); border: 1px solid rgba(255,255,255,.8); border-radius: 999px; font-size: 10px; font-weight: 950; backdrop-filter: blur(8px); }
+    small { position: absolute; right: 10px; bottom: 10px; z-index: 1; padding: 5px 7px; color: var(--text-dark); background: rgba(255, 255, 255, .76); border: 1px solid rgba(255,255,255,.8); border-radius: 6px; font-size: 10px; font-weight: 600; backdrop-filter: none; }
   }
 
   &_cardBody { display: grid; align-content: start; gap: 8px; min-width: 0; padding: 14px; }
   &_cardTopline { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
-  &_cardTopline > span { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 10px; font-weight: 850; text-overflow: ellipsis; white-space: nowrap; }
-  &_card h2 { margin: 0; color: var(--text-dark); font-size: 18px; font-weight: 950; line-height: 118%; }
+  &_cardTopline > span { min-width: 0; overflow: hidden; color: var(--text-muted); font-size: 10px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  &_card h2 { margin: 0; color: var(--text-dark); font-size: 18px; font-weight: 600; line-height: 118%; }
   &_card p { min-height: 38px; overflow: hidden; color: var(--text-muted); font-size: 11px; font-weight: 650; line-height: 145%; }
 
-  &_rarity { padding: 4px 6px; border-radius: 999px; font-size: 9px; font-style: normal; font-weight: 950; white-space: nowrap; }
+  &_rarity { padding: 4px 6px; border-radius: 6px; font-size: 9px; font-style: normal; font-weight: 600; white-space: nowrap; }
   &_rarity_common { color: #66715e; background: #edf1e8; }
   &_rarity_uncommon { color: #227138; background: #e7f5e5; }
   &_rarity_rare { color: #176195; background: #e2f1fb; }
@@ -239,8 +238,8 @@
   &_cardFooter { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin-top: 5px; }
   &_cardActions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; }
   &_cardFooter > div { display: grid; gap: 3px; min-width: 0; }
-  &_cardFooter span, &_listForm label > span { color: var(--text-muted); font-size: 10px; font-weight: 850; }
-  &_cardFooter strong { color: var(--text-dark); font-size: 15px; font-weight: 950; white-space: nowrap; }
+  &_cardFooter span, &_listForm label > span { color: var(--text-muted); font-size: 10px; font-weight: 600; }
+  &_cardFooter strong { color: var(--text-dark); font-size: 15px; font-weight: 600; white-space: nowrap; }
   &_cardFooter small { font-size: 9px; color: var(--text-muted); }
   &_cardFooter button, &_listForm > button {
     display: inline-flex;
@@ -250,29 +249,29 @@
     min-height: 37px;
     padding: 0 11px;
     color: #fff;
-    background: var(--green-gradient);
+    background: var(--primary-deep);
     border-radius: var(--radius-sm);
-    box-shadow: var(--button-shadow);
+    box-shadow: none;
     font-size: 12px;
-    font-weight: 900;
+    font-weight: 600;
     white-space: nowrap;
     &:disabled { cursor: wait; opacity: .62; }
   }
-  &_secondaryButton { color: var(--primary-deep) !important; background: var(--primary-soft) !important; box-shadow: none !important; }
-  &_chartButton { color: var(--primary-deep) !important; background: var(--primary-soft) !important; box-shadow: none !important; }
+  &_secondaryButton { color: var(--primary-deep) !important; background: var(--primary-soft) !important; box-shadow: none; }
+  &_chartButton { color: var(--primary-deep) !important; background: var(--primary-soft) !important; box-shadow: none; }
 
   &_storage header { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; }
-  &_storage header span { color: var(--primary-deep); font-size: 11px; font-weight: 900; text-transform: uppercase; letter-spacing: .05em; }
-  &_storage header h2 { margin-top: 4px; color: var(--text-dark); font-size: 23px; font-weight: 950; }
+  &_storage header span { color: var(--primary-deep); font-size: 11px; font-weight: 600; text-transform: none; letter-spacing: normal; }
+  &_storage header h2 { margin-top: 4px; color: var(--text-dark); font-size: 23px; font-weight: 600; }
   &_storage header p { max-width: 360px; color: var(--text-muted); font-size: 12px; font-weight: 650; line-height: 145%; text-align: right; }
 
   &_listForm { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; align-items: end; margin-top: 5px; }
   &_listForm label { display: grid; gap: 5px; min-width: 0; }
   &_listForm label > div { display: flex; align-items: center; min-width: 0; height: 37px; padding: 0 9px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-sm); }
-  &_listForm input { width: 100%; min-width: 0; color: var(--text-dark); background: transparent; font-size: 12px; font-weight: 850; }
+  &_listForm input { width: 100%; min-width: 0; color: var(--text-dark); background: transparent; font-size: 12px; font-weight: 600; }
   &_listForm label b { color: var(--text-muted); font-size: 9px; }
 
-  &_empty { display: grid; min-height: 260px; place-items: center; padding: 30px; color: var(--text-muted); background: rgba(255,255,255,.58); border: 1px dashed var(--border-strong); border-radius: var(--radius-md); font-size: 14px; font-weight: 800; text-align: center; }
+  &_empty { display: grid; min-height: 260px; place-items: center; padding: 30px; color: var(--text-muted); background: rgba(255,255,255,.58); border: 1px dashed var(--border-strong); border-radius: var(--radius-md); font-size: 14px; font-weight: 600; text-align: center; }
   &_notice { display: flex; align-items: center; justify-content: center; gap: 7px; color: var(--text-muted); font-size: 11px; font-weight: 650; text-align: center; }
   &_notice svg { flex: 0 0 auto; color: var(--primary); }
 
@@ -284,7 +283,7 @@
     place-items: center;
     padding: 20px;
     background: rgba(24, 34, 22, .42);
-    backdrop-filter: blur(8px);
+    backdrop-filter: none;
   }
 
   &_analytics {
@@ -297,7 +296,7 @@
     background: #fbfcf9;
     border: 1px solid rgba(255, 255, 255, .76);
     border-radius: var(--radius-lg);
-    box-shadow: 0 26px 80px rgba(10, 24, 8, .28);
+    box-shadow: none;
 
     > header { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; }
     > header > button { display: grid; flex: 0 0 auto; width: 38px; height: 38px; place-items: center; color: var(--text-muted); background: var(--surface-muted); border-radius: 50%; font-size: 19px; }
@@ -307,23 +306,23 @@
   &_analyticsTitle .nft_visual { width: 58px; height: 58px; flex: 0 0 auto; border-radius: var(--radius-sm); }
   &_analyticsTitle .nft_visual b { font-size: 31px; }
   &_analyticsTitle .nft_visual small { display: none; }
-  &_analyticsTitle span, &_chartHeader span, &_salesPanelHeader span { color: var(--text-muted); font-size: 11px; font-weight: 850; }
-  &_analyticsTitle h2 { margin: 3px 0; overflow: hidden; color: var(--text-dark); font-size: 23px; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
-  &_analyticsTitle p { color: var(--primary-deep); font-size: 12px; font-weight: 850; }
+  &_analyticsTitle span, &_chartHeader span, &_salesPanelHeader span { color: var(--text-muted); font-size: 11px; font-weight: 600; }
+  &_analyticsTitle h2 { margin: 3px 0; overflow: hidden; color: var(--text-dark); font-size: 23px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  &_analyticsTitle p { color: var(--primary-deep); font-size: 12px; font-weight: 600; }
   &_analyticsGrid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(290px, .85fr); gap: 16px; align-items: stretch; }
   &_chartPanel, &_salesPanel { min-width: 0; padding: 16px; background: #fff; border: 1px solid var(--border); border-radius: var(--radius-md); }
   &_chartPanel { display: grid; gap: 14px; }
   &_chartHeader, &_salesPanelHeader { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; }
-  &_chartHeader h3, &_salesPanelHeader h3 { margin-top: 4px; color: var(--text-dark); font-size: 20px; font-weight: 950; }
-  &_chartHeader > b, &_salesPanelHeader > b { padding: 6px 8px; color: var(--primary-deep); background: var(--primary-soft); border-radius: 999px; font-size: 10px; font-weight: 900; white-space: nowrap; }
+  &_chartHeader h3, &_salesPanelHeader h3 { margin-top: 4px; color: var(--text-dark); font-size: 20px; font-weight: 600; }
+  &_chartHeader > b, &_salesPanelHeader > b { padding: 6px 8px; color: var(--primary-deep); background: var(--primary-soft); border-radius: 6px; font-size: 10px; font-weight: 600; white-space: nowrap; }
   &_chart { position: relative; height: 180px; padding: 10px 0 0 40px; background: repeating-linear-gradient(to bottom, transparent 0, transparent 43px, rgba(42,46,43,.07) 44px); border-radius: var(--radius-sm); }
   &_chart svg { display: block; width: 100%; height: 100%; overflow: visible; }
-  &_chartMax, &_chartMin { position: absolute; left: 0; color: var(--text-muted); font-size: 10px; font-weight: 800; }
+  &_chartMax, &_chartMin { position: absolute; left: 0; color: var(--text-muted); font-size: 10px; font-weight: 600; }
   &_chartMax { top: 8px; }
   &_chartMin { bottom: 7px; }
   &_chartStats { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
   &_chartStats span { display: grid; gap: 4px; padding: 9px; color: var(--text-muted); background: var(--surface-raised); border-radius: var(--radius-sm); font-size: 10px; font-weight: 750; }
-  &_chartStats b { overflow: hidden; color: var(--text-dark); font-size: 11px; font-weight: 950; text-overflow: ellipsis; white-space: nowrap; }
+  &_chartStats b { overflow: hidden; color: var(--text-dark); font-size: 11px; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
   &_chartEmpty, &_analyticsEmpty, &_salesEmpty { display: grid; min-height: 178px; place-items: center; padding: 16px; color: var(--text-muted); background: var(--surface-raised); border: 1px dashed var(--border-strong); border-radius: var(--radius-sm); font-size: 12px; font-weight: 750; text-align: center; }
   &_salesPanel { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; max-height: 405px; overflow: auto; }
   &_saleRow { display: grid; grid-template-columns: 39px minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); }
@@ -332,9 +331,9 @@
   &_saleRow .nft_visual small { display: none; }
   &_saleRow > div { display: grid; gap: 3px; min-width: 0; }
   &_saleRow strong, &_saleRow span, &_saleRow em { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  &_saleRow strong { color: var(--text-dark); font-size: 11px; font-weight: 900; }
+  &_saleRow strong { color: var(--text-dark); font-size: 11px; font-weight: 600; }
   &_saleRow span { color: var(--text-muted); font-size: 9px; font-weight: 700; }
-  &_saleRow em { max-width: 72px; color: var(--primary-deep); font-size: 10px; font-style: normal; font-weight: 850; }
+  &_saleRow em { max-width: 72px; color: var(--primary-deep); font-size: 10px; font-style: normal; font-weight: 600; }
 }
 
 @media (max-width: 920px) {

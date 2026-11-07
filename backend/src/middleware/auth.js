@@ -1,11 +1,12 @@
-import jwt from "jsonwebtoken";
+import { verifyAccessToken } from "../config/jwt.js";
 import { db } from "../config/db.js";
+import { setMarketCookie } from '../services/market-session.service.js';
 
 export const auth = async (req, res, next) => {
     try {
         const header = req.headers.authorization;
 
-        if (!header) {
+        if (!header || !header.startsWith("Bearer ")) {
             return res.status(401).json({ message: "Authorization header missing" });
         }
 
@@ -15,10 +16,10 @@ export const auth = async (req, res, next) => {
             return res.status(401).json({ message: "Token missing" });
         }
 
-        const decoded = jwt.verify(token, "dev-secret");
+        const decoded = verifyAccessToken(token);
 
         const [rows] = await db.execute(
-            "SELECT COALESCE(status, 'active') AS status FROM users WHERE id = ? LIMIT 1",
+            "SELECT COALESCE(status, 'active') AS status, COALESCE(token_version, 0) AS token_version FROM users WHERE id = ? LIMIT 1",
             [decoded.userId]
         );
 
@@ -30,7 +31,13 @@ export const auth = async (req, res, next) => {
             return res.status(403).json({ message: "Account is not active" });
         }
 
+        if (Number(decoded.tokenVersion || 0) !== Number(rows[0].token_version || 0)) {
+            return res.status(401).json({ message: "Session expired", code: "TOKEN_REVOKED" });
+        }
+
         req.user = decoded;
+        req.user.user_id = decoded.userId;
+        setMarketCookie(res,token,decoded.exp,req.secure);
 
         next();
     } catch (err) {

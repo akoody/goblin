@@ -46,3 +46,21 @@ Thumbs.db
 
 # Local QA captures (curated copies live in docs/)
 /qa-*.png
+
+# Next.js market app
+apps/*/.next/
+apps/*/node_modules/
+apps/*/next-env.d.ts
+
+# Android (Capacitor) — подпись и сборки; см. также android/.gitignore
+android/keystore.properties
+android/local.properties
+*.apk
+*.aab
+*.jks
+*.keystore
+
+# Пользовательские загрузки и бинарные релизы
+backend/uploads/*
+!backend/uploads/.gitkeep
+public/downloads/

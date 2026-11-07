@@ -1,8 +1,34 @@
-import { exec } from "child_process";
-import util from "util";
 import { db } from "../config/db.js";
+import { externalWalletProcessing } from "../config/wallet-networks.js";
+import { createTronWithdrawal } from "./withdrawal.service.js";
+import Decimal from "decimal.js";
 
-const execAsync = util.promisify(exec);
+const supportedCurrencies = new Set(["BTC", "ETH", "USDT", "TRX"]);
+
+export const normalizeTransferAmount = (value, currency) => {
+  let amount;
+  try {
+    amount = new Decimal(String(value));
+  } catch {
+    amount = new Decimal(NaN);
+  }
+
+  if (!amount.isFinite() || amount.lte(0) || amount.decimalPlaces() > 18) {
+    const error = new Error("Укажите корректную положительную сумму");
+    error.status = 400;
+    throw error;
+  }
+
+  const precision = currency === "BTC" ? 8 : currency === "USDT" || currency === "TRX" ? 6 : 18;
+  if (amount.decimalPlaces() > precision) {
+    const error = new Error(`Для ${currency} допустимо не более ${precision} знаков после запятой`);
+    error.status = 400;
+    throw error;
+  }
+
+  return amount;
+};
+
 
 const ensureTransferAllowed = async (userId, type) => {
   const [rows] = await db.query(
@@ -31,138 +57,184 @@ const ensureTransferAllowed = async (userId, type) => {
   }
 };
 
-export async function send(userId, to, amount, currency, type) {
+export async function send(userId, to, amount, currency, type, idempotencyKey) {
   await ensureTransferAllowed(userId, type);
 
-  const [users] = await db.query("SELECT id, username FROM users WHERE id = ?", [userId]);
-
-  if (users.length === 0) {
-    throw new Error("User not found");
+  const symbol = String(currency || "").trim().toUpperCase();
+  if (!supportedCurrencies.has(symbol)) {
+    const error = new Error("Неизвестная валюта");
+    error.status = 400;
+    throw error;
   }
-
-  const [wallets] = await db.query(
-    "SELECT id, address, balance, private_key FROM wallets WHERE user_id = ? AND currency = ?",
-    [userId, currency.toUpperCase()]
-  );
-
-  if (wallets.length === 0) {
-    throw new Error(`Wallet for ${currency} not found`);
-  }
-
-  const fromWallet = wallets[0];
-
-  if (parseFloat(fromWallet.balance) < amount) {
-    throw new Error(`Insufficient balance. Available: ${fromWallet.balance} ${currency}`);
+  const decimalAmount = normalizeTransferAmount(amount, symbol);
+  if(type!=='internal'&&['BTC','ETH'].includes(symbol))throw Object.assign(new Error('Для BTC/ETH сначала подтвердите расчёт комиссии в форме вывода'),{status:409});
+  const requestKey = String(idempotencyKey || "").trim();
+  if (!requestKey || requestKey.length > 128) {
+    const error = new Error("Не удалось проверить запрос на повтор. Обновите страницу и попробуйте снова.");
+    error.status = 400;
+    throw error;
   }
 
   if (type === "internal") {
-    return sendInternal(userId, fromWallet, to, amount, currency);
+    return sendInternal(userId, to, decimalAmount, symbol, requestKey);
   }
 
-  return sendExternal(userId, fromWallet, to, amount, currency);
+  const assetCapabilities = externalWalletProcessing.assets[symbol];
+  if (type !== "internal" && (!externalWalletProcessing.withdrawalsEnabled || !assetCapabilities?.withdrawalsEnabled)) {
+    const error = new Error(externalWalletProcessing.reason);
+    error.status = 503;
+    throw error;
+  }
+
+  if (["TRX", "USDT"].includes(symbol)) {
+    return createTronWithdrawal({
+      userId,
+      currency: symbol,
+      toAddress: to,
+      amount: decimalAmount.toFixed(),
+      idempotencyKey: requestKey,
+    });
+  }
+
+  throw new Error("Вывод для этой сети пока не подключён");
 }
 
-async function sendExternal(userId, fromWallet, address, amount, currency) {
-  const privateKey = fromWallet.private_key;
-  const scriptPath = `/home/${currency.toLowerCase()}/send.py`;
-  const command = `python3 ${scriptPath} -userId "${userId}" -to "${address}" -amount "${amount}" -privateKey "${privateKey}"`;
-
-  let pythonOutput;
-  try {
-    const { stdout, stderr } = await execAsync(command);
-    if (stderr) console.error("Python stderr:", stderr);
-    pythonOutput = JSON.parse(stdout);
-  } catch (err) {
-    throw new Error(`Transaction failed: ${err.message}`);
+async function sendInternal(userId, email, amount, currency, idempotencyKey) {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail || normalizedEmail.length > 255) {
+    const error = new Error("Укажите корректную почту получателя");
+    error.status = 400;
+    throw error;
   }
 
-  if (!pythonOutput.result) {
-    throw new Error(`Transaction failed: ${pythonOutput.error || "Unknown error"}`);
-  }
-
-  const txHash = pythonOutput.tx_hash;
-  const fromAddress = pythonOutput.from;
-
-  await db.query("START TRANSACTION");
+  const connection = await db.getConnection();
   try {
-    await db.query("UPDATE wallets SET balance = balance - ? WHERE id = ?", [amount, fromWallet.id]);
+    await connection.beginTransaction();
 
-    const [result] = await db.query(
-      `INSERT INTO transactions (wallet_id, tx_hash, from_address, to_address, amount, currency, type)
-       VALUES (?, ?, ?, ?, ?, ?, 'external')`,
-      [fromWallet.id, txHash, fromAddress, address, amount, currency.toUpperCase()]
+    const [accounts] = await connection.execute(
+      `SELECT id, status, COALESCE(internal_transfers_enabled, 1) AS internal_transfers_enabled
+       FROM users
+       WHERE id = ? OR LOWER(email) = ?
+       ORDER BY id
+       FOR UPDATE`,
+      [userId, normalizedEmail]
+    );
+    const sender = accounts.find((account) => Number(account.id) === Number(userId));
+    const recipient = accounts.find((account) => Number(account.id) !== Number(userId));
+    if (!sender || sender.status !== "active" || Number(sender.internal_transfers_enabled) !== 1) {
+      const error = new Error("Внутренние переводы для аккаунта отключены");
+      error.status = 403;
+      throw error;
+    }
+    if (!recipient || recipient.status !== "active") {
+      const error = new Error("Активный аккаунт с такой почтой не найден");
+      error.status = 404;
+      throw error;
+    }
+    if (Number(recipient.id) === Number(userId)) {
+      const error = new Error("Нельзя переводить средства самому себе");
+      error.status = 400;
+      throw error;
+    }
+
+    const [walletRows] = await connection.execute(
+      `SELECT id, user_id, address, balance
+       FROM wallets
+       WHERE currency = ? AND user_id IN (?, ?)
+         AND COALESCE(status, 'active') = 'active'
+       ORDER BY id
+       FOR UPDATE`,
+      [currency, userId, recipient.id]
+    );
+    const fromWallet = walletRows.find((wallet) => Number(wallet.user_id) === Number(userId));
+    const toWallet = walletRows.find((wallet) => Number(wallet.user_id) === Number(recipient.id));
+    if (!fromWallet) {
+      const error = new Error(`Кошелёк ${currency} отправителя не найден`);
+      error.status = 404;
+      throw error;
+    }
+    if (!toWallet) {
+      const error = new Error(`У получателя нет кошелька ${currency}`);
+      error.status = 404;
+      throw error;
+    }
+
+    const [previousRows] = await connection.execute(
+      `SELECT id, to_address, amount, currency
+       FROM transactions
+       WHERE wallet_id = ? AND idempotency_key = ?
+       LIMIT 1`,
+      [fromWallet.id, idempotencyKey]
+    );
+    if (previousRows.length > 0) {
+      const previous = previousRows[0];
+      if (
+        String(previous.to_address || "").trim().toLowerCase() !== normalizedEmail ||
+        String(previous.currency).toUpperCase() !== currency ||
+        !new Decimal(String(previous.amount)).eq(amount)
+      ) {
+        const error = new Error("Ключ запроса уже использован для другого перевода");
+        error.status = 409;
+        throw error;
+      }
+      await connection.commit();
+      return {
+        transactionId: previous.id,
+        txHash: null,
+        from: fromWallet.address,
+        to: normalizedEmail,
+        amount: previous.amount,
+        currency,
+        type: "internal",
+        status: "completed",
+        duplicate: true,
+      };
+    }
+
+    const amountText = amount.toFixed();
+    const [debit] = await connection.execute(
+      `UPDATE wallets SET balance = balance - ?
+       WHERE id = ? AND balance - COALESCE(locked_balance, 0) >= ?`,
+      [amountText, fromWallet.id, amountText]
+    );
+    if (debit.affectedRows !== 1) {
+      const error = new Error("Недостаточно средств для перевода");
+      error.status = 409;
+      throw error;
+    }
+    await connection.execute(
+      "UPDATE wallets SET balance = balance + ? WHERE id = ?",
+      [amountText, toWallet.id]
     );
 
-    await updateExchangeWallet(currency, fromAddress, amount, "subtract");
-
-    await db.query("COMMIT");
-
-    return {
-      transactionId: result.insertId,
-      txHash,
-      from: fromAddress,
-      to: address,
-      amount,
-      currency,
-      type: "external",
-      status: "completed",
-    };
-  } catch (err) {
-    await db.query("ROLLBACK");
-    throw new Error(`Transaction failed: ${err.message}`);
-  }
-}
-
-async function sendInternal(userId, fromWallet, email, amount, currency) {
-  const [recipients] = await db.query("SELECT id FROM users WHERE email = ?", [email]);
-
-  if (recipients.length === 0) {
-    throw new Error(`User with email ${email} not found`);
-  }
-
-  const recipientId = recipients[0].id;
-
-  if (recipientId === userId) {
-    throw new Error("Cannot send to yourself");
-  }
-
-  const [recipientWallets] = await db.query(
-    "SELECT id, address FROM wallets WHERE user_id = ? AND currency = ?",
-    [recipientId, currency.toUpperCase()]
-  );
-
-  if (recipientWallets.length === 0) {
-    throw new Error(`Recipient does not have a ${currency} wallet`);
-  }
-
-  const toWallet = recipientWallets[0];
-
-  await db.query("START TRANSACTION");
-  try {
-    await db.query("UPDATE wallets SET balance = balance - ? WHERE id = ?", [amount, fromWallet.id]);
-    await db.query("UPDATE wallets SET balance = balance + ? WHERE id = ?", [amount, toWallet.id]);
-
-    const [result] = await db.query(
-      `INSERT INTO transactions (wallet_id, from_address, to_address, amount, currency, type)
-       VALUES (?, ?, ?, ?, ?, 'internal')`,
-      [fromWallet.id, fromWallet.address, email, amount, currency.toUpperCase()]
+    const [result] = await connection.execute(
+      `INSERT INTO transactions (wallet_id, from_address, to_address, amount, currency, type, idempotency_key)
+       VALUES (?, ?, ?, ?, ?, 'internal', ?)`,
+      [fromWallet.id, fromWallet.address, normalizedEmail, amountText, currency, idempotencyKey]
     );
 
-    await db.query("COMMIT");
+    await connection.commit();
 
     return {
       transactionId: result.insertId,
       txHash: null,
       from: fromWallet.address,
-      to: email,
-      amount,
+      to: normalizedEmail,
+      amount: amountText,
       currency,
       type: "internal",
       status: "completed",
     };
   } catch (err) {
-    await db.query("ROLLBACK");
-    throw new Error(`Internal transfer failed: ${err.message}`);
+    await connection.rollback();
+    if (err.code === "ER_DUP_ENTRY") {
+      const error = new Error("Этот перевод уже обрабатывается или выполнен");
+      error.status = 409;
+      throw error;
+    }
+    throw err;
+  } finally {
+    connection.release();
   }
 }
 

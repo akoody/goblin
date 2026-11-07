@@ -156,5 +156,13 @@ export function generateUserWallets(userId) {
         (wallet) => createTronAddress(wallet.signingKey.publicKey)
     );
 
-    return { btc, eth, usdt };
+    const trx = createWallet(
+        mnemonic,
+        `m/44'/195'/0'/0/${index}`,
+        index,
+        "TRX",
+        (wallet) => createTronAddress(wallet.signingKey.publicKey)
+    );
+
+    return { btc, eth, usdt, trx };
 }

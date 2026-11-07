@@ -1,7 +1,9 @@
 import express from "express";
+import {requireAccountFeature} from '../middleware/account-feature.js';
 import { buyGift, getGiftMarketHistory, getInventory, getMarketplace, listGift, unlistGift } from "../services/nft.service.js";
 
 const router = express.Router();
+router.use(requireAccountFeature('nft'));
 
 const handleError = (res, error) => {
   console.error("NFT marketplace error:", error);

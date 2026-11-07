@@ -1,4 +1,5 @@
 .myOrders {
+  width: 100%; max-width: 1440px; margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -32,8 +33,8 @@
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-soft);
-    backdrop-filter: blur(18px);
+    box-shadow: none;
+    backdrop-filter: none;
 
     &_main {
       display: grid;
@@ -48,7 +49,7 @@
       background: rgba(255, 255, 255, 0.72);
       border: 1px dashed var(--border-strong);
       border-radius: var(--radius-md);
-      font-weight: 850;
+      font-weight: 600;
     }
 
     &_top {
@@ -64,21 +65,21 @@
         padding: 4px;
         background: var(--surface-muted);
         border: 1px solid var(--border);
-        border-radius: 999px;
+        border-radius: 6px;
 
         button {
           min-height: 38px;
           padding: 0 18px;
           color: var(--text-muted);
-          border-radius: 999px;
+          border-radius: 6px;
           font-size: 15px;
-          font-weight: 800;
+          font-weight: 600;
         }
 
         &_active {
           color: var(--primary-deep) !important;
           background: #fff;
-          box-shadow: 0 8px 18px rgba(32, 40, 32, 0.08);
+          box-shadow: none;
         }
       }
     }
@@ -93,13 +94,13 @@
       background: #fff;
       border: 1px solid var(--border);
       border-radius: var(--radius-md);
-      box-shadow: 0 8px 20px rgba(32, 40, 32, 0.05);
+      box-shadow: none;
       transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
 
       &:hover {
         border-color: rgba(76, 161, 31, 0.32);
-        box-shadow: var(--shadow-card);
-        transform: translateY(-1px);
+        box-shadow: none;
+        transform: none;
       }
 
       &_top {
@@ -116,7 +117,7 @@
 
           p {
             font-size: 18px;
-            font-weight: 800;
+            font-weight: 600;
           }
 
           > span {
@@ -135,17 +136,17 @@
           p {
             color: var(--primary-deep);
             font-size: 14px;
-            font-weight: 800 !important;
+            font-weight: 600 !important;
           }
 
           span {
             padding: 4px 8px;
             color: var(--text-muted);
             background: var(--surface-muted);
-            border-radius: 999px;
+            border-radius: 6px;
             font-size: 10px;
-            font-weight: 800;
-            text-transform: uppercase;
+            font-weight: 600;
+            text-transform: none;
           }
         }
 

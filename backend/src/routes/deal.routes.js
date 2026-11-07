@@ -1,5 +1,8 @@
 import express from "express";
+import { hasStaffPermission } from '../services/staff-access.service.js';
 import {db} from "../config/db.js";
+import { reserveUsdt, consumeUsdtReservation, releaseUsdtReservation } from "../services/wallet-reservation.service.js";
+import { applyP2pCommission, calculateP2pSettlement, getP2pFeePolicy } from "../services/p2p-fee.service.js";
 
 const router = express.Router();
 
@@ -36,24 +39,8 @@ const getAdminEmails = () => {
 
 const requireAdmin = async (req, res, next) => {
     try {
-        const adminEmails = getAdminEmails();
-
-        if (adminEmails.length === 0) {
-            return res.status(403).json({ message: "Admin emails are not configured" });
-        }
-
-        const [rows] = await db.execute(
-            `SELECT email FROM users WHERE id = ?`,
-            [req.user.userId]
-        );
-
-        const currentEmail = normalizeEmail(rows[0]?.email);
-
-        if (!currentEmail || !adminEmails.includes(currentEmail)) {
-            return res.status(403).json({ message: "Admin access required" });
-        }
-
-        next();
+        if(await hasStaffPermission(req.user.userId,'p2p'))return next();
+        return res.status(403).json({message:'Недостаточно прав на просмотр P2P'});
     } catch (err) {
         console.error('Admin check error:', err);
         res.status(500).json({ message: 'Failed to check admin access' });
@@ -80,11 +67,16 @@ const canAccessDealRow = async (deal, userId, executor = db) => {
         return true;
     }
 
-    return isAdminUser(userId, executor);
+    return hasStaffPermission(userId, 'p2p', executor);
 };
 
-const formatDeal = (row) => ({
+const formatDeal = (row) => {
+    const p2pGrossAmount = row.crypto_amount || row.order_amount || 0;
+    const p2pSettlement = calculateP2pSettlement(p2pGrossAmount, row.p2p_fee_percent || 0);
+    return {
     ...row,
+    p2p_fee_amount: p2pSettlement.feeAmount,
+    p2p_net_amount: p2pSettlement.netAmount,
     buyer: {
         id: row.buyer_id,
         username: row.buyer_username,
@@ -106,7 +98,8 @@ const formatDeal = (row) => ({
         createdAt: row.order_created_at,
         payment_methods: parsePaymentMethods(row.order_payment_methods ?? row.payment_methods)
     }
-});
+    };
+};
 
 const dealSelect = `
     SELECT d.*,
@@ -176,7 +169,10 @@ router.post('/', async (req, res) => {
         }
 
         const price = safeNumber(order.price);
-        const maxOrderCryptoAmount = safeNumber(order.amount);
+        const maxOrderCryptoAmount = Math.max(
+            safeNumber(order.amount) - safeNumber(order.filled_amount),
+            0,
+        );
         const cryptoAmount = requestedCryptoAmount > 0
             ? requestedCryptoAmount
             : requestedFiatAmount > 0 && price > 0
@@ -217,27 +213,16 @@ router.post('/', async (req, res) => {
             sellerId = uid;
         }
 
-        const [[sellerWallet]] = await connection.execute(
-            `SELECT * FROM wallets WHERE user_id = ? AND currency = 'USDT' FOR UPDATE`,
-            [sellerId]
+        const [[feePolicy]] = await connection.execute(
+            "SELECT p2p_fee_percent FROM commerce_policy WHERE id=1 FOR UPDATE"
         );
-
-        if (!sellerWallet || safeNumber(sellerWallet.balance) < cryptoAmount) {
-            await connection.rollback();
-            return res.status(400).json({ message: 'Seller has insufficient crypto balance' });
-        }
-
-        await connection.execute(
-            `UPDATE wallets
-             SET balance = balance - ?, locked_balance = COALESCE(locked_balance, 0) + ?
-             WHERE user_id = ? AND currency = 'USDT'`,
-            [cryptoAmount, cryptoAmount, sellerId]
-        );
+        if (!feePolicy) throw Object.assign(new Error('Настройки комиссии P2P не найдены'), { status: 503 });
+        await reserveUsdt(connection, sellerId, cryptoAmount);
 
         const [result] = await connection.execute(
-            `INSERT INTO deals (order_id, buyer_id, seller_id, crypto_amount, fiat_amount, price, payment_method, expires_at, crypto_locked)
-             VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE), 1)`,
-            [order.id, buyerId, sellerId, cryptoAmount, fiatAmount, price, paymentMethod || allowedPaymentMethods[0] || 'bank']
+            `INSERT INTO deals (order_id, buyer_id, seller_id, crypto_amount, fiat_amount, price, payment_method, expires_at, crypto_locked, p2p_fee_percent)
+             VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE), 1, ?)`,
+            [order.id, buyerId, sellerId, cryptoAmount, fiatAmount, price, paymentMethod || allowedPaymentMethods[0] || 'bank', feePolicy.p2p_fee_percent]
         );
 
         await connection.execute(
@@ -260,7 +245,7 @@ router.post('/', async (req, res) => {
     } catch (err) {
         await connection.rollback();
         console.error('POST /deal error:', err);
-        res.status(500).json({ message: 'Failed to create deal' });
+        res.status(err.status || 500).json({ message: err.status ? err.message : 'Failed to create deal' });
     } finally {
         connection.release();
     }
@@ -296,6 +281,14 @@ router.get('/admin/all', requireAdmin, async (req, res) => {
     } catch (err) {
         console.error('GET /deal/admin/all error:', err);
         res.status(500).json({ message: 'Failed to fetch all deals' });
+    }
+});
+
+router.get('/fee-policy', async (_req, res) => {
+    try {
+        res.set('Cache-Control', 'no-store').json(await getP2pFeePolicy());
+    } catch (error) {
+        res.status(error.status || 500).json({ message: error.status ? error.message : 'Не удалось загрузить комиссию P2P' });
     }
 });
 
@@ -359,6 +352,7 @@ router.patch('/:id/status', async (req, res) => {
         }
 
         const deal = dealRows[0];
+        const grossAmount = String(deal.crypto_amount || deal.order_amount);
         const dealCryptoAmount = safeNumber(deal.crypto_amount) > 0
             ? safeNumber(deal.crypto_amount)
             : safeNumber(deal.order_amount);
@@ -439,26 +433,30 @@ router.patch('/:id/status', async (req, res) => {
 
 
             if (deal.crypto_locked) {
-                if (safeNumber(lockedSenderWallet.locked_balance) < dealCryptoAmount) {
-                    await connection.rollback();
-                    return res.status(400).json({ message: 'Locked crypto balance is insufficient' });
-                }
-
-                await connection.execute(
-                    `UPDATE wallets SET locked_balance = locked_balance - ? WHERE user_id = ? AND currency = 'USDT'`,
-                    [dealCryptoAmount, cryptoSenderId]
-                );
+                await consumeUsdtReservation(connection, cryptoSenderId, grossAmount);
             } else {
-                await connection.execute(
-                    `UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND currency = 'USDT'`,
-                    [dealCryptoAmount, cryptoSenderId]
+                const [debit] = await connection.execute(
+                    `UPDATE wallets SET balance = balance - ? WHERE user_id = ? AND currency = 'USDT' AND balance >= ?`,
+                    [grossAmount, cryptoSenderId, grossAmount]
                 );
+                if (debit.affectedRows !== 1) {
+                    await connection.rollback();
+                    return res.status(409).json({ message: 'Insufficient crypto balance' });
+                }
             }
 
-            await connection.execute(
+            const settlement = await applyP2pCommission(connection, {
+                dealId: id,
+                sellerId: cryptoSenderId,
+                beneficiaryId: cryptoReceiverId,
+                grossAmount,
+                feePercent: deal.p2p_fee_percent || 0,
+            });
+            const [credit] = await connection.execute(
                 `UPDATE wallets SET balance = balance + ? WHERE user_id = ? AND currency = 'USDT'`,
-                [dealCryptoAmount, cryptoReceiverId]
+                [settlement.netAmount, cryptoReceiverId]
             );
+            if (credit.affectedRows !== 1) throw new Error('Receiver USDT wallet not found');
 
 
             await connection.execute(
@@ -470,7 +468,7 @@ router.patch('/:id/status', async (req, res) => {
                     `deal-${id}-completed`,
                     lockedSenderWallet.address,
                     receiverUser.email,
-                    dealCryptoAmount
+                    settlement.netAmount
                 ]
             );
 
@@ -478,12 +476,7 @@ router.patch('/:id/status', async (req, res) => {
         }
 
         if (status === 'CANCELLED' && !transferred && deal.crypto_locked) {
-            await connection.execute(
-                `UPDATE wallets
-                 SET balance = balance + ?, locked_balance = GREATEST(COALESCE(locked_balance, 0) - ?, 0)
-                 WHERE user_id = ? AND currency = 'USDT'`,
-                [dealCryptoAmount, dealCryptoAmount, cryptoSenderId]
-            );
+            await releaseUsdtReservation(connection, cryptoSenderId, grossAmount);
 
             await connection.execute(
                 `UPDATE orders
@@ -519,7 +512,7 @@ router.patch('/:id/status', async (req, res) => {
     } catch (err) {
         await connection.rollback();
         console.error('PATCH /deal/:id/status error:', err);
-        res.status(500).json({ message: 'Failed to update deal status' });
+        res.status(err.status || 500).json({ message: err.status ? err.message : 'Failed to update deal status' });
     } finally {
         connection.release();
     }

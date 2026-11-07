@@ -1,0 +1,30 @@
+import 'dotenv/config';
+import assert from 'node:assert/strict';
+import {createRequire} from 'node:module';
+import {Keypair,TransactionMessage,VersionedTransaction,ComputeBudgetProgram,PublicKey} from '@solana/web3.js';
+import {db} from '../src/config/db.js';
+import {connection,NATIVE_SOL} from '../src/services/solana-client.js';
+import {signAccessToken} from '../src/config/jwt.js';
+import {isAdministratorEmail} from '../src/services/staff-access.service.js';
+import {launchInstructions} from '../src/services/pump-launch.service.js';
+const require=createRequire(import.meta.url),BN=require('bn.js');
+const {PUMP_SDK,OnlinePumpSdk,getBuyTokenAmountFromSolAmount}=require('@pump-fun/pump-sdk');
+try{
+ const rpc=connection();assert.equal(await rpc.getGenesisHash(),'5eykt4UsFv8P8NJdTREpY1vzqKqZKvdpKuc147dw2N9d');
+ const sdk=new OnlinePumpSdk(rpc),global=await sdk.fetchGlobal(),feeConfig=await sdk.fetchFeeConfig();
+ const user=Keypair.generate(),mint=Keypair.generate();
+ const amount=getBuyTokenAmountFromSolAmount({global,feeConfig,mintSupply:null,bondingCurve:null,amount:new BN('200000000'),quoteMint:new PublicKey(NATIVE_SOL)}).muln(99).divn(100);
+ assert(amount.gtn(0));
+ const ix=await launchInstructions({global,mint:mint.publicKey,name:'X'.repeat(32),symbol:'Y'.repeat(13),uri:'https://cryptogoblin.ru/api/pump/m/00000000-0000-0000-0000-000000000000',user:user.publicKey,minimum:amount.toString(),buy:'200000000'});
+ const block=await rpc.getLatestBlockhash('finalized');
+ const tx=new VersionedTransaction(new TransactionMessage({payerKey:user.publicKey,recentBlockhash:block.blockhash,instructions:[ComputeBudgetProgram.setComputeUnitLimit({units:600000}),...ix]}).compileToV0Message());
+ tx.sign([user,mint]);const size=tx.serialize().length;assert(size<=1232);
+ const base=`http://127.0.0.1:${process.env.PORT||3000}/api/pump`;
+ assert.equal((await fetch(base+'/admin/policy')).status,401);
+ const [users]=await db.query("SELECT id,email,token_version FROM users WHERE status='active' LIMIT 1000");
+ const admin=users.find(u=>isAdministratorEmail(u.email));assert(admin);
+ const headers=u=>({Authorization:`Bearer ${signAccessToken({userId:u.id,tokenVersion:Number(u.token_version||0)})}`});
+ const p=await fetch(base+'/admin/policy',{headers:headers(admin)});assert.equal(p.status,200);const policy=await p.json();assert(policy.configured);
+ const nonAdmin=users.find(u=>!isAdministratorEmail(u.email));if(nonAdmin)assert.equal((await fetch(base+'/admin/policy',{headers:headers(nonAdmin)})).status,403);
+ console.log(JSON.stringify({mainnet:true,sdkBuild:true,transactionBytes:size,policyEnabled:policy.enabled,minimumBuy:policy.minimum_buy_sol,serviceFee:policy.service_fee_sol,networkBudget:policy.network_budget_sol,accessChecks:'passed',fundsMoved:false,fundedSimulationTested:false}));
+}finally{await db.end();}

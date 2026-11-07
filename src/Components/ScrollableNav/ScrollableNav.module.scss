@@ -1,0 +1,6 @@
+.wrapper { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.items { flex: 1; min-width: 0; overflow-x: auto; display: flex; flex-wrap: nowrap !important; }
+.items > * { flex-shrink: 0; }
+.arrow { flex: 0 0 36px; min-height: 36px; border: 1px solid var(--border); border-radius: 6px; background: #fff; color: var(--primary-deep); }
+.arrow:disabled { opacity: .3; cursor: default; }
+@media(max-width:640px) { .arrow { flex-basis: 28px; } .wrapper { gap: 4px; } }

@@ -1,14 +1,11 @@
 import React, { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import styles from "./Me.module.scss";
-import { FaUser, FaUserPlus } from "react-icons/fa";
+import { FaUser } from "react-icons/fa";
 import { TbCopy } from "react-icons/tb";
 import bg from "../../assets/images/Group 756.png";
-import { BiChevronRight, BiDislike, BiLike } from "react-icons/bi";
-import { RiCoupon2Line } from "react-icons/ri";
+import { BiChevronRight } from "react-icons/bi";
 import { IoCard } from "react-icons/io5";
-import { HiUser } from "react-icons/hi";
-import { GrNotification } from "react-icons/gr";
-import { FaUserLock } from "react-icons/fa6";
 import { Loader } from "../../Components/Loader/Loader";
 import api from "../../api";
 import { LuTrash2 } from "react-icons/lu";
@@ -20,6 +17,9 @@ export const Me = () => {
   const [deleting, setDeleting] = useState(false);
   const [confirmationOpen, setConfirmationOpen] = useState(false);
   const [confirmationText, setConfirmationText] = useState("");
+  const [confirmationPassword, setConfirmationPassword] = useState("");
+  const [stats, setStats] = useState(null);
+  const [paymentMethodCount, setPaymentMethodCount] = useState(null);
   const token = localStorage.getItem("token");
   const canDelete = confirmationText.trim().toUpperCase() === "УДАЛИТЬ";
 
@@ -37,6 +37,13 @@ export const Me = () => {
           }
         })
         .finally(() => setLoading(false));
+
+    if (token) {
+      api.get("/api/auth/me/stats").then((response) => setStats(response.data)).catch(() => {});
+      api.get("/payment-methods").then((response) => {
+        setPaymentMethodCount(Array.isArray(response.data) ? response.data.length : 0);
+      }).catch(() => {});
+    }
     else {
       localStorage.removeItem("token");
       window.location.reload();
@@ -44,12 +51,12 @@ export const Me = () => {
   }, []);
 
   const handleDeleteAccount = () => {
-    if (!canDelete || deleting) return;
+    if (!canDelete || !confirmationPassword || deleting) return;
 
     setDeleting(true);
 
     api
-      .delete("/api/auth/me")
+      .delete("/api/auth/me", { data: { password: confirmationPassword } })
       .then(() => {
         localStorage.clear();
         sessionStorage.setItem("accountDeletedMessage", "Аккаунт полностью удален");
@@ -114,141 +121,57 @@ export const Me = () => {
             </p>
           </div> */}
         </div>
+      </div>
+      <div className={styles.profile_info}>
+        <div className={styles.profile_info_left}>
+          <div className={styles.profile_info_item}>
+            <h1 className="h1">{stats ? stats.recent : "—"}</h1>
+            <p className="p">Сделок за 30 дней</p>
+          </div>
+          <div className={styles.profile_info_item}>
+            <h1 className="h1">{stats ? stats.completed : "—"}</h1>
+            <p className="p">Всего завершено</p>
+          </div>
+        </div>{" "}
+        <div className={styles.profile_info_left}>
+          <div className={styles.profile_info_item}>
+            <h1 className="h1">{stats ? `${stats.successRate}%` : "—"}</h1>
+            <p className="p">Успешность завершённых сделок</p>
+          </div>
+          <div className={styles.profile_info_item}>
+            <h1 className="h1">{stats ? stats.cancelled : "—"}</h1>
+            <p className="p">Отменено сделок</p>
+          </div>
+        </div>
+      </div>
+      <div className={styles.profile_section}>
+        <Link className={styles.profile_section_item} to="/me?section=payment-methods">
+          <section className="p">
+            <IoCard />
+            Способы оплаты
+          </section>
+          <section className="span">
+            <p>{paymentMethodCount ?? "—"}</p>
+            <p>
+              <BiChevronRight />
+            </p>
+          </section>
+        </Link>
+      </div>{" "}
+      <section className={styles.profile_danger_zone}>
+        <div>
+          <strong>Опасная зона</strong>
+          <p>Удаление отключит аккаунт и финансовые операции. Действие требует пароля.</p>
+        </div>
         <button
           type="button"
           className={styles.profile_top_delete}
           onClick={() => setConfirmationOpen(true)}
           disabled={deleting}
         >
-          <LuTrash2 />
-          Удалить аккаунт
+          <LuTrash2 /> Удалить аккаунт
         </button>
-      </div>
-      <div className={styles.profile_info}>
-        <div className={styles.profile_info_left}>
-          <div className={styles.profile_info_item}>
-            <h1 className="h1">7</h1>
-            <p className="p">Сделок за 30 дней</p>
-          </div>
-          <div className={styles.profile_info_item}>
-            <h1 className="h1">12</h1>
-            <p className="p">Всего завершено</p>
-          </div>
-          <div className={styles.profile_info_secondDiv}>
-            <button>Buy</button>
-            <span></span>
-            <button>Sell</button>
-          </div>
-        </div>{" "}
-        <div className={styles.profile_info_left}>
-          <div className={styles.profile_info_item}>
-            <h1 className="h1">63%</h1>
-            <p className="p">Успешность за 30 дней</p>
-          </div>
-          <div className={styles.profile_info_item}>
-            <h1 className="h1">100%</h1>
-            <p className="p">Положительный рейтинг</p>
-          </div>
-          <div className={styles.profile_info_secondDiv}>
-            <button>
-              <BiLike />
-            </button>
-            <span></span>
-            <button>
-              <BiDislike />
-            </button>
-          </div>
-        </div>
-      </div>
-      <div className={styles.profile_section}>
-        <div className={styles.profile_section_item}>
-          <section className="p">
-            <RiCoupon2Line />
-            P2P купоны
-          </section>
-          <section className="span">
-            <p>
-              <BiChevronRight />
-            </p>
-          </section>
-        </div>
-        <div className={styles.profile_section_item}>
-          <section className="p">
-            <IoCard />
-            Способы оплаты
-          </section>
-          <section className="span">
-            <p>5</p>
-            <p>
-              <BiChevronRight />
-            </p>
-          </section>
-        </div>
-      </div>{" "}
-      <div className={styles.profile_section_item}>
-        <section className="p">
-          <HiUser />
-          Статус продавца
-        </section>
-        <section>
-          <p className="span">Подать заявку </p>
-          <p className="span">
-            <BiChevronRight />
-          </p>
-        </section>
-      </div>
-      <div className={styles.profile_section}>
-        <div className={styles.profile_section_item}>
-          <section className="p">
-            <BiLike />
-            Оставить отзыв
-          </section>
-          <section>
-            <p className="span">100%</p>
-            <p className="span">
-              <BiChevronRight />
-            </p>
-          </section>
-        </div>
-        <div className={styles.profile_section_item}>
-          <section className="p">
-            <GrNotification />
-            Уведомления
-          </section>
-          <section className="span">
-            <p>5</p>
-            <p>
-              <BiChevronRight />
-            </p>
-          </section>
-        </div>
-      </div>{" "}
-      <div className={styles.profile_section}>
-        <div className={styles.profile_section_item}>
-          <section className="p">
-            <FaUserPlus />
-            Подписки
-          </section>
-          <section>
-            <p className="span"></p>
-            <p className="span">
-              <BiChevronRight />
-            </p>
-          </section>
-        </div>
-        <div className={styles.profile_section_item}>
-          <section className="p">
-            <FaUserLock />
-            Черный список
-          </section>
-          <section className="span">
-            <p>5</p>
-            <p>
-              <BiChevronRight />
-            </p>
-          </section>
-        </div>
-      </div>
+      </section>
       {confirmationOpen && (
         <div className={styles.modal}>
           <div className={styles.modal_content}>
@@ -266,11 +189,20 @@ export const Me = () => {
                 autoFocus
               />
             </label>
+            <label className={styles.modal_confirm}>
+              <span>Текущий пароль</span>
+              <input
+                type="password"
+                autoComplete="current-password"
+                value={confirmationPassword}
+                onChange={(event) => setConfirmationPassword(event.target.value)}
+              />
+            </label>
             <button
               type="button"
               className="red-button"
               onClick={handleDeleteAccount}
-              disabled={!canDelete || deleting}
+              disabled={!canDelete || !confirmationPassword || deleting}
             >
               {deleting ? "Удаляем..." : "Удалить аккаунт"}
             </button>
@@ -280,6 +212,7 @@ export const Me = () => {
               onClick={() => {
                 setConfirmationOpen(false);
                 setConfirmationText("");
+                setConfirmationPassword("");
               }}
               disabled={deleting}
             >
