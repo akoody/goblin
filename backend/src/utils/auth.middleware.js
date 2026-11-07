@@ -1,4 +1,4 @@
-import jwt from "jsonwebtoken";
+import { verifyAccessToken } from "../config/jwt.js";
 
 export function auth(req, res, next) {
     const header = req.headers.authorization;
@@ -8,7 +8,7 @@ export function auth(req, res, next) {
     const token = header.slice(7);
 
     try {
-        req.user = jwt.verify(token, "dev-secret");
+        req.user = verifyAccessToken(token);
         next();
     } catch {
         return res.status(401).json({ message: "Invalid token" });

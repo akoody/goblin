@@ -1,34 +1,216 @@
 import express from "express";
+import {transactionHistory} from '../services/transaction-history.service.js';
+import {updateUserControls} from '../services/user-controls.service.js';
+import {nativeOverview,saveNativePolicy,createNativeVaults,previewNativeCollection,executeNativePlan,recheckNativeJob} from '../services/native-chain.service.js';
+import {nativeCurrencies} from '../services/wallet-inventory.js';
+import {collectionOverview,createCollectionWallets,saveCollectionPolicy} from '../services/treasury-collection.service.js';
+import {previewCollection,queueCollection,cancelCollectionJob,recheckCollectionJob} from '../services/collection-engine.service.js';
+import {findWalletUsers,staffWalletBalances} from '../services/staff-wallets.service.js';
+import { staffAccess,helperRoutePermission,listHelpers,saveHelper } from '../services/staff-access.service.js';
+import { referralReport, referralInvitees, issueReferralLink } from '../services/referral-report.service.js';
+import { describeLoginDevice } from "../services/login-device.service.js";
+import { loginIpSearch } from '../services/login-ip-search.js';
+import { depositComplianceOverview, updateDepositFee, reviewDeposit } from '../services/deposit-compliance.service.js';
 import { db } from "../config/db.js";
+import { reserveUsdt } from "../services/wallet-reservation.service.js";
+import { getP2pFeePolicy, updateP2pFeePolicy } from "../services/p2p-fee.service.js";
+import { featureKeys, getPlatformFeatures, updatePlatformFeature } from "../services/platform-features.service.js";
+import { getTreasuryAutoWithdrawalPolicy, updateTreasuryAutoWithdrawalPolicy } from "../services/treasury-auto-withdrawal-policy.service.js";
 
 const router = express.Router();
 
 const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
 
-const getAdminEmails = () =>
-  String(process.env.ADMIN_EMAILS || process.env.VITE_ADMIN_EMAILS || "")
-    .split(/[,;\n]/)
-    .map(normalizeEmail)
-    .filter(Boolean);
-
 const requireAdmin = async (req, res, next) => {
   try {
-    const adminEmails = getAdminEmails();
-    const [rows] = await db.execute("SELECT email FROM users WHERE id = ?", [req.user.userId]);
-    const email = normalizeEmail(rows[0]?.email);
-
-    if (!email || !adminEmails.includes(email)) {
-      return res.status(403).json({ message: "Admin access required" });
-    }
-
-    next();
+    const access=await staffAccess(req.user.userId);
+    req.staffAccess=access;
+    if(access.role==='admin')return next();
+    const permission=helperRoutePermission(req.method,req.path);
+    if(access.role==='helper'&&permission&&access.permissions.includes(permission))return next();
+    return res.status(403).json({message:'Недостаточно прав'});
   } catch (err) {
     console.error("Admin access check error:", err);
     res.status(500).json({ message: "Failed to check admin access" });
   }
 };
 
+router.get('/access',async(req,res)=>{try{res.set('Cache-Control','no-store').json(await staffAccess(req.user.userId));}catch{res.status(500).json({message:'Не удалось проверить права'});}});
 router.use(requireAdmin);
+router.get('/helpers',async(_req,res)=>{try{res.set('Cache-Control','no-store').json(await listHelpers());}catch{res.status(500).json({message:'Не удалось загрузить хелперов'});}});
+router.post('/helpers',async(req,res)=>{try{res.json(await saveHelper(req.user.userId,String(req.body?.identifier||''),req.body));}catch(e){res.status(e.status||500).json({message:e.status?e.message:'Не удалось сохранить хелпера'});}});
+const depositHandler=fn=>async(req,res)=>{
+  try{res.set('Cache-Control','no-store').json(await fn(req));}
+  catch(e){if(!e.status)console.error('Deposit admin:',e.message);res.status(e.status||500).json({message:e.status?e.message:'Не удалось выполнить операцию с депозитом'});}
+};
+router.get('/wallet-users',depositHandler(req=>findWalletUsers(req.query.q)));
+router.get('/wallet-users/:id/balances',depositHandler(req=>staffWalletBalances(req.params.id)));
+router.get('/deposit-compliance',depositHandler(()=>depositComplianceOverview()));
+router.get('/treasury-auto-withdrawal-policy',depositHandler(()=>getTreasuryAutoWithdrawalPolicy()));
+router.get('/treasury-collection',depositHandler(()=>collectionOverview()));
+router.get('/native-chains',depositHandler(()=>nativeOverview()));
+router.patch('/native-chains/:currency',depositHandler(req=>saveNativePolicy(req.user.userId,req.params.currency,req.body)));
+router.post('/native-chains/wallets',depositHandler(req=>createNativeVaults(req.user.userId)));
+router.post('/native-chains/:currency/preview',depositHandler(req=>previewNativeCollection(req.params.currency,req.user.userId,req.body.requestKey)));
+router.post('/native-chains/plans/:id/execute',depositHandler(req=>executeNativePlan(req.params.id,null,req.user.userId)));
+router.post('/native-chains/jobs/:id/recheck',depositHandler(req=>recheckNativeJob(req.params.id,req.user.userId)));
+router.post('/treasury-collection/wallets',depositHandler(req=>createCollectionWallets(req.user.userId)));
+router.patch('/treasury-collection/:network',depositHandler(req=>saveCollectionPolicy(req.user.userId,req.params.network,req.body)));
+router.post('/treasury-collection/:network/preview',depositHandler(req=>previewCollection(req.params.network,req.user.userId,req.body.requestKey)));
+router.post('/treasury-collection/plans/:id/execute',depositHandler(req=>queueCollection(req.params.id,req.user.userId)));
+router.post('/treasury-collection/jobs/:id/cancel',depositHandler(req=>cancelCollectionJob(req.params.id,req.user.userId)));
+router.post('/treasury-collection/jobs/:id/recheck',depositHandler(req=>recheckCollectionJob(req.params.id,req.user.userId)));
+router.patch('/treasury-auto-withdrawal-policy',depositHandler(req=>updateTreasuryAutoWithdrawalPolicy(req.user.userId,req.body)));
+router.get('/p2p-fee-policy',depositHandler(()=>getP2pFeePolicy()));
+router.patch('/p2p-fee-policy',depositHandler(req=>updateP2pFeePolicy(req.user.userId,req.body?.feePercent)));
+const referralHandler = fn => async (req, res) => {
+  try { res.set('Cache-Control', 'no-store').json(await fn(req)); }
+  catch (error) {
+    if (!error.status) console.error('Referral admin:', error.message);
+    res.status(error.status || 500).json({ message: error.status ? error.message : 'Не удалось обработать реферальные данные' });
+  }
+};
+router.get('/referrals',referralHandler(req=>referralReport(req.query)));
+router.get('/referrals/:id/invitees',referralHandler(req=>referralInvitees(req.params.id,req.query)));
+router.post('/referrals/:id/link',referralHandler(req=>issueReferralLink(req.params.id)));
+router.patch('/deposit-compliance/policy',depositHandler(req=>updateDepositFee(req.user.userId,req.body.feeUsd)));
+router.post('/deposit-compliance/:id/review',depositHandler(req=>reviewDeposit(req.user.userId,req.params.id,req.body)));
+
+router.get("/login-ips", async (req, res) => {
+  try {
+    const {where,params}=loginIpSearch(req.query.q);
+    const [rows] = await db.query(`SELECT l.*, u.username FROM user_login_ips l
+      JOIN users u ON u.id = l.user_id
+      ${where} ORDER BY (l.is_new_ip = 1 AND l.reviewed_at IS NULL) DESC, l.last_seen_at DESC, l.id DESC LIMIT 200`,params);
+    const [[matched]]=await db.query(`SELECT COUNT(*) AS total FROM user_login_ips l JOIN users u ON u.id=l.user_id ${where}`,params);
+    const [[counts]] = await db.query("SELECT COUNT(*) AS unread FROM user_login_ips WHERE is_new_ip = 1 AND reviewed_at IS NULL");
+    res.set('Cache-Control','no-store').json({ rows: rows.map((row) => ({ ...row, ...describeLoginDevice(row.user_agent, row.device_model) })), unread: Number(counts.unread),total:Number(matched.total) });
+  } catch (error) {
+    console.error("Login IP list failed:", error.message);
+    res.status(error.status||500).json({ message: error.status?error.message:"Не удалось загрузить историю IP" });
+  }
+});
+
+router.patch("/login-ips/:id/review", async (req, res) => {
+  if (!/^\d+$/.test(req.params.id)) return res.status(400).json({ message: "Invalid ID" });
+  try {
+    await db.query("UPDATE user_login_ips SET reviewed_at = COALESCE(reviewed_at, CURRENT_TIMESTAMP) WHERE id = ? AND is_new_ip = 1", [req.params.id]);
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ message: "Не удалось отметить уведомление" });
+  }
+});
+
+const safeNumber = (value) => {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : 0;
+};
+
+const parsePaymentMethods = (value) => {
+  if (Array.isArray(value)) return value.map((item) => String(item).trim()).filter(Boolean);
+  try {
+    const parsed = JSON.parse(value || "[]");
+    return Array.isArray(parsed) ? parsed.map((item) => String(item).trim()).filter(Boolean) : [];
+  } catch {
+    return [];
+  }
+};
+
+router.get("/features", async (req, res) => {
+  try {
+    res.json(await getPlatformFeatures());
+  } catch (error) {
+    console.error("GET /admin/features error:", error);
+    res.status(500).json({ message: "Failed to load platform features" });
+  }
+});
+
+router.patch("/features/:feature", async (req, res) => {
+  try {
+    const feature = String(req.params.feature || "").trim();
+    if (!featureKeys.includes(feature) || typeof req.body?.enabled !== "boolean") {
+      return res.status(400).json({ message: "Invalid feature settings" });
+    }
+    res.json(await updatePlatformFeature(feature, req.body.enabled));
+  } catch (error) {
+    console.error("PATCH /admin/features error:", error);
+    res.status(500).json({ message: "Failed to update platform feature" });
+  }
+});
+
+router.post("/deals", async (req, res) => {
+  const connection = await db.getConnection();
+  try {
+    const orderId = Number(req.body?.orderId);
+    const counterpartyUserId = Number(req.body?.counterpartyUserId);
+    const cryptoAmount = safeNumber(req.body?.cryptoAmount);
+    const requestedPaymentMethod = String(req.body?.paymentMethod || "").trim();
+    if (!Number.isInteger(orderId) || orderId <= 0 || !Number.isInteger(counterpartyUserId) || counterpartyUserId <= 0 || cryptoAmount <= 0) {
+      return res.status(400).json({ message: "Order ID, counterparty ID and positive USDT amount are required" });
+    }
+
+    await connection.beginTransaction();
+    const [[order]] = await connection.execute("SELECT * FROM orders WHERE id = ? FOR UPDATE", [orderId]);
+    if (!order || order.status !== "pending") {
+      await connection.rollback();
+      return res.status(400).json({ message: "Order is not active" });
+    }
+    if (Number(order.user_id) === counterpartyUserId) {
+      await connection.rollback();
+      return res.status(400).json({ message: "Counterparty must differ from the order creator" });
+    }
+    const [[counterparty]] = await connection.execute(
+      "SELECT id FROM users WHERE id = ? AND COALESCE(status, 'active') = 'active' FOR UPDATE",
+      [counterpartyUserId]
+    );
+    if (!counterparty) {
+      await connection.rollback();
+      return res.status(404).json({ message: "Active counterparty was not found" });
+    }
+
+    const availableAmount = safeNumber(order.amount) - safeNumber(order.filled_amount);
+    const fiatAmount = cryptoAmount * safeNumber(order.price);
+    const minLimit = safeNumber(order.min_limit);
+    const maxLimit = safeNumber(order.max_limit) || availableAmount * safeNumber(order.price);
+    const paymentMethods = parsePaymentMethods(order.payment_methods);
+    const paymentMethod = requestedPaymentMethod || paymentMethods[0];
+    if (cryptoAmount > availableAmount || fiatAmount < minLimit || fiatAmount > maxLimit) {
+      await connection.rollback();
+      return res.status(400).json({ message: "Deal amount is outside the order limits" });
+    }
+    if (!paymentMethod || !paymentMethods.includes(paymentMethod)) {
+      await connection.rollback();
+      return res.status(400).json({ message: "Payment method is not available for this order" });
+    }
+
+    const buyerId = order.type === "SELL" ? counterpartyUserId : Number(order.user_id);
+    const sellerId = order.type === "SELL" ? Number(order.user_id) : counterpartyUserId;
+    const [[feePolicy]] = await connection.execute(
+      "SELECT p2p_fee_percent FROM commerce_policy WHERE id=1 FOR UPDATE"
+    );
+    if (!feePolicy) throw Object.assign(new Error("Настройки комиссии P2P не найдены"), { status: 503 });
+    await reserveUsdt(connection, sellerId, cryptoAmount);
+    const [result] = await connection.execute(
+      `INSERT INTO deals (order_id, buyer_id, seller_id, crypto_amount, fiat_amount, price, payment_method, expires_at, crypto_locked, p2p_fee_percent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, DATE_ADD(NOW(), INTERVAL 15 MINUTE), 1, ?)`,
+      [order.id, buyerId, sellerId, cryptoAmount, fiatAmount, order.price, paymentMethod, feePolicy.p2p_fee_percent]
+    );
+    await connection.execute(
+      `UPDATE orders
+       SET filled_amount = filled_amount + ?, status = CASE WHEN filled_amount + ? >= amount THEN 'completed' ELSE status END
+       WHERE id = ?`,
+      [cryptoAmount, cryptoAmount, order.id]
+    );
+    await connection.commit();
+    res.status(201).json({ id: result.insertId, orderId: order.id, buyerId, sellerId, cryptoAmount, fiatAmount, paymentMethod });
+  } catch (error) {
+    await connection.rollback();
+    console.error("POST /admin/deals error:", error);
+    res.status(error.status || 500).json({ message: error.status ? error.message : "Failed to create P2P deal" });
+  } finally {
+    connection.release();
+  }
+});
 
 const formatUser = (row) => ({
   id: row.id,
@@ -42,9 +224,32 @@ const formatUser = (row) => ({
   withdrawalsEnabled: Boolean(row.withdrawals_enabled),
   internalTransfersEnabled: Boolean(row.internal_transfers_enabled),
   p2pEnabled: Boolean(row.p2p_enabled),
+  nftEnabled: Boolean(row.nft_enabled),
+  guarantorEnabled: Boolean(row.guarantor_enabled),
+  tradingEnabled: Boolean(row.trading_enabled),
+  marketAccountsEnabled: Boolean(row.market_accounts_enabled),
+  marketServicesEnabled: Boolean(row.market_services_enabled),
   walletCount: Number(row.wallet_count || 0),
   totalBalanceUsd: Number(row.total_balance_usd || 0),
+  walletBalances: row.walletBalances || Object.fromEntries(nativeCurrencies.map(currency => [currency, '0'])),
 });
+
+const addWalletBalances = async (rows) => {
+  if (!rows.length) return rows;
+  const ids = rows.map((row) => Number(row.id));
+  const placeholders = ids.map(() => "?").join(",");
+  const [walletRows] = await db.execute(
+    `SELECT user_id, currency, balance FROM wallets WHERE user_id IN (${placeholders})`,
+    ids
+  );
+  const balancesByUser = new Map(ids.map((id) => [id, Object.fromEntries(nativeCurrencies.map(currency => [currency, '0']))]));
+  for (const wallet of walletRows) {
+    const balances = balancesByUser.get(Number(wallet.user_id));
+    const currency = String(wallet.currency || "").toUpperCase();
+    if (balances && currency) balances[currency] = String(wallet.balance ?? "0");
+  }
+  return rows.map((row) => ({ ...row, walletBalances: balancesByUser.get(Number(row.id)) }));
+};
 
 const getTableColumns = async (tableName) => {
   const [rows] = await db.execute(
@@ -93,6 +298,7 @@ router.get("/users", async (req, res) => {
               COALESCE(u.deposits_enabled, 1) AS deposits_enabled,
               COALESCE(u.withdrawals_enabled, 1) AS withdrawals_enabled,
               COALESCE(u.internal_transfers_enabled, 1) AS internal_transfers_enabled,
+              u.nft_enabled,u.guarantor_enabled,u.trading_enabled,u.market_accounts_enabled,u.market_services_enabled,
               COALESCE(u.p2p_enabled, 1) AS p2p_enabled,
               COUNT(w.id) AS wallet_count,
               COALESCE(SUM(w.balance * CASE
@@ -111,7 +317,7 @@ router.get("/users", async (req, res) => {
       params
     );
 
-    res.json(rows.map(formatUser));
+    res.json((await addWalletBalances(rows)).map(formatUser));
   } catch (err) {
     console.error("GET /admin/users error:", err);
     res.status(500).json({ message: "Failed to fetch users" });
@@ -256,25 +462,10 @@ router.patch("/users/:id/controls", async (req, res) => {
       return res.status(400).json({ message: "Invalid user id" });
     }
 
-    const status = req.body?.status === "blocked" ? "blocked" : "active";
-    const depositsEnabled = req.body?.depositsEnabled === false ? 0 : 1;
-    const withdrawalsEnabled = req.body?.withdrawalsEnabled === false ? 0 : 1;
-    const internalTransfersEnabled = req.body?.internalTransfersEnabled === false ? 0 : 1;
-    const p2pEnabled = req.body?.p2pEnabled === false ? 0 : 1;
-
-    await db.execute(
-      `UPDATE users
-       SET status = ?,
-           deposits_enabled = ?,
-           withdrawals_enabled = ?,
-           internal_transfers_enabled = ?,
-           p2p_enabled = ?
-       WHERE id = ?`,
-      [status, depositsEnabled, withdrawalsEnabled, internalTransfersEnabled, p2pEnabled, id]
-    );
+    await updateUserControls(req.user.userId,id,req.body);
 
     const [rows] = await db.execute(
-      `SELECT u.id,
+      `SELECT u.nft_enabled,u.guarantor_enabled,u.trading_enabled,u.market_accounts_enabled,u.market_services_enabled,u.id,
               u.username,
               u.email,
               u.referral_code,
@@ -304,11 +495,16 @@ router.patch("/users/:id/controls", async (req, res) => {
       return res.status(404).json({ message: "User not found" });
     }
 
-    res.json(formatUser(rows[0]));
+    res.json(formatUser((await addWalletBalances(rows))[0]));
   } catch (err) {
     console.error("PATCH /admin/users/:id/controls error:", err);
-    res.status(500).json({ message: "Failed to update user controls" });
+    res.status(err.status||500).json({ message: err.status?err.message:"Не удалось обновить доступ пользователя" });
   }
+});
+
+router.get('/transaction-history', async (req,res) => {
+  try {res.set('Cache-Control','no-store').json(await transactionHistory(req.query,{administrator:true,includeP2p:req.staffAccess.role==='admin'||req.staffAccess.permissions.includes('p2p')}));}
+  catch(e){res.status(e.status||500).json({message:e.status?e.message:'Не удалось загрузить историю'});}
 });
 
 router.get("/transactions", async (req, res) => {
@@ -386,7 +582,8 @@ router.get("/transactions", async (req, res) => {
       createdAt: row.created_at,
     }));
 
-    res.json([...transfers, ...p2p].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
+    const includeP2p=req.staffAccess.role==='admin'||req.staffAccess.permissions.includes('p2p');
+    res.json([...transfers, ...(includeP2p?p2p:[])].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
   } catch (err) {
     console.error("GET /admin/transactions error:", err);
     res.status(500).json({ message: "Failed to fetch transactions" });

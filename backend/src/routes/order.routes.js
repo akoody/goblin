@@ -1,4 +1,5 @@
 import express from "express";
+import { auth } from "../middleware/auth.js";
 import {db} from "../config/db.js";
 
 const router = express.Router();
@@ -35,6 +36,24 @@ const formatOrder = (row) => ({
         email: row.creator_email
     }
 });
+
+router.get('/catalog', async (req, res) => {
+    try {
+        const [rows] = await db.execute(`SELECT o.id, o.type, o.price, o.amount, o.filled_amount,
+            o.min_limit, o.max_limit, o.payment_methods, o.status, u.username AS creator_username
+            FROM orders o JOIN users u ON u.id = o.user_id
+            WHERE o.status = 'pending' ORDER BY o.created_at DESC LIMIT 500`);
+        res.json(rows.map((row) => ({ ...row,
+            available_amount: Math.max(safeNumber(row.amount) - safeNumber(row.filled_amount), 0),
+            payment_methods: parsePaymentMethods(row.payment_methods), user: { username: row.creator_username },
+        })));
+    } catch (error) {
+        console.error('Public P2P catalog failed:', error.message);
+        res.status(500).json({ message: 'Не удалось загрузить объявления' });
+    }
+});
+
+router.use(auth);
 
 router.get('/', async (req, res) => {
     try {
@@ -145,7 +164,10 @@ router.post('/', async (req, res) => {
                 [userId, "USDT"]
             );
 
-            const usdtBalance = safeNumber(balanceRows[0]?.balance);
+            const usdtBalance = Math.max(
+                0,
+                safeNumber(balanceRows[0]?.balance) - safeNumber(balanceRows[0]?.locked_balance)
+            );
 
             if (usdtBalance < amount) {
                 return res.status(400).json({

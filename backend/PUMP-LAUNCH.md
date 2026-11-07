@@ -1,0 +1,11 @@
+# Pump.fun launches
+
+Separate from Jupiter and the TRON swap. Uses the official pinned Pump SDK CommonJS build; SDK ESM currently fails against Anchor's CJS exports. `029_pump_launches.sql` must precede application restart.
+
+Defaults: disabled; 1 SOL internal treasury service fee, minimum first purchase 0.2 SOL, 0.05 SOL maximum network/rent budget. The purchase minimum is Goblin policy, not a Pump.fun requirement. Admin may change these values. A draft snapshots all amounts and expires after five minutes. Metadata and PNG/JPEG are immutable, public at cryptogoblin.ru/api/pump; preserve this host and database permanently for created tokens. No IPFS durability is claimed.
+
+Only SOL-paired standard create_v2 + initial purchase, no mayhem, cashback, holder rewards, creator fee sharing or custom quote. User's custodial address is creator and receives the Token-2022 initial purchase. This does not enable arbitrary Token-2022 swaps or withdrawals. Creator protocol fees remain claimable on-chain and are not part of Goblin's launch fee; no automatic claim implementation is included.
+
+Build locally with the official SDK, simulate payer/mint/output account and expenditure, then persist signed bytes and ledger reservation atomically before broadcasting. A per-user advisory lock serializes this with Jupiter sends. Unknown broadcast never generates a new transaction. Only finalized receipts settle. Failed receipts charge actual network loss but no service fee. Expired, unseen transactions release reserves after finalized expiry plus 150 blocks and blockhash invalidation. Mismatches remain reserved in review. Successful settlement debits actual SOL cost plus service fee and credits tokens + SOL treasury in one database transaction exactly once. Treasury remains internal accounting backed by custody, not an immediate blockchain transfer.
+
+Activation requires an explicitly approved funded end-to-end test. Unfunded SDK construction and unit tests do not prove mainnet execution. No real launches are made by installation scripts. Back up encrypted custodial keys and database. Monitor /api/pump/admin/launches and the pump_launches review queue. API keys never reach the browser. Existing Jupiter classic-SPL restrictions remain intact.

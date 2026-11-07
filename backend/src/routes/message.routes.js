@@ -1,26 +1,9 @@
 import express from "express";
+import {chatProfile} from '../services/chat-profile.service.js';
+import { hasStaffPermission } from '../services/staff-access.service.js';
 import { db } from "../config/db.js";
 
 const router = express.Router();
-
-const normalizeEmail = (email) => String(email || "").trim().toLowerCase();
-
-const getAdminEmails = () => {
-  return String(process.env.ADMIN_EMAILS || process.env.VITE_ADMIN_EMAILS || "")
-    .split(/[,;\n]/)
-    .map(normalizeEmail)
-    .filter(Boolean);
-};
-
-const isAdminUser = async (userId) => {
-  const adminEmails = getAdminEmails();
-  if (adminEmails.length === 0) {
-    return false;
-  }
-
-  const [rows] = await db.execute("SELECT email FROM users WHERE id = ?", [userId]);
-  return adminEmails.includes(normalizeEmail(rows[0]?.email));
-};
 
 const canAccessDeal = async (dealId, userId) => {
   const [dealRows] = await db.execute(
@@ -32,7 +15,7 @@ const canAccessDeal = async (dealId, userId) => {
     return true;
   }
 
-  return isAdminUser(userId);
+  return (await hasStaffPermission(userId,'p2p')) && (await hasStaffPermission(userId,'chat'));
 };
 
 // Get message history for a deal
@@ -59,13 +42,14 @@ router.get("/:dealId", async (req, res) => {
     );
 
     // Format for frontend expectations (msg.sender.id, msg.sender.username)
+    const profiles=new Map(await Promise.all([...new Set(rows.map(m=>m.sender_id))].map(async id=>[id,await chatProfile(id)])));
     const formattedMessages = rows.map(m => ({
         id: m.id,
         text: m.text,
         createdAt: m.created_at,
         sender: {
             id: m.sender_id,
-            username: m.username
+            ...profiles.get(m.sender_id)
         }
     }));
 
@@ -109,7 +93,7 @@ router.post("/", async (req, res) => {
       createdAt: new Date().toISOString(),
       sender: {
         id: userId,
-        username: userRows[0]?.username || `user_${userId}`
+        ...await chatProfile(userId)
       }
     };
 

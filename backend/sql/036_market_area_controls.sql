@@ -1,0 +1,12 @@
+ALTER TABLE users
+  ADD COLUMN market_accounts_enabled TINYINT(1) NOT NULL DEFAULT 1,
+  ADD COLUMN market_services_enabled TINYINT(1) NOT NULL DEFAULT 1;
+
+CREATE TABLE IF NOT EXISTS user_access_audit (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  actor_id BIGINT UNSIGNED NOT NULL,
+  user_id BIGINT UNSIGNED NOT NULL,
+  changes JSON NOT NULL,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  KEY idx_user_access_audit (user_id,created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,0 +1,25 @@
+import express from 'express';
+import Decimal from 'decimal.js';
+import {auth} from '../middleware/auth.js';
+import {createRateLimit} from '../middleware/rate-limit.js';
+import {staffAccess} from '../services/staff-access.service.js';
+import {transact} from '../services/commerce.service.js';
+import {db} from '../config/db.js';
+import {solanaState,createSolanaQuote,executeSolanaSwap} from '../services/solana-custody.service.js';
+import {solanaConfigured,swapConfigured,atomicSol} from '../services/solana-client.js';
+const router=express.Router();router.use(auth);
+const handle=fn=>async(req,res)=>{try{res.set('Cache-Control','no-store').json(await fn(req));}catch(e){res.status(e.status||400).json({message:e.status?e.message:'Не удалось выполнить операцию Solana. Проверьте параметры и доступность сети.'});}};
+router.get('/state',handle(req=>solanaState(req.user.userId)));
+router.post('/quote',createRateLimit({windowMs:60000,max:10,message:'Слишком много котировок'}),handle(req=>createSolanaQuote(req.user.userId,req.body)));
+router.post('/swaps/:id/execute',createRateLimit({windowMs:60000,max:10,message:'Слишком много операций'}),handle(req=>executeSolanaSwap(req.user.userId,req.params.id)));
+router.use('/admin',async(req,res,next)=>{try{if((await staffAccess(req.user.userId)).role!=='admin')return res.status(403).json({message:'Только для администратора'});next();}catch{res.status(500).json({message:'Не удалось проверить права'});}});
+router.get('/admin/policy',handle(async()=>{const [[policy]]=await db.query('SELECT * FROM solana_swap_policy WHERE id=1');return {...policy,enabled:Boolean(policy.enabled),rpcConfigured:solanaConfigured(),signingConfigured:swapConfigured()};}));
+router.post('/admin/policy',handle(async req=>{
+ const {minimumSol,maxFeeSol,enabled}=req.body;
+ const minimum=atomicSol(minimumSol),maxFee=atomicSol(maxFeeSol);
+ if(typeof enabled!=='boolean'||new Decimal(maxFeeSol).gt('0.1'))throw Object.assign(new Error('Проверьте настройки. Резерв сети не выше 0,1 SOL.'),{status:400});
+ if(enabled&&!swapConfigured())throw Object.assign(new Error('Сначала настройте RPC, Jupiter и разрешение серверной подписи'),{status:409});
+ await transact(async c=>{await c.execute('SELECT id FROM solana_swap_policy WHERE id=1 FOR UPDATE');await c.execute('UPDATE solana_swap_policy SET enabled=?,minimum_sol=?,max_fee_sol=?,updated_by=? WHERE id=1',[enabled?1:0,new Decimal(minimum).div(1e9).toFixed(9),new Decimal(maxFee).div(1e9).toFixed(9),req.user.userId]);await c.execute('INSERT INTO solana_policy_audit(actor_id,policy_json) VALUES(?,?)',[req.user.userId,JSON.stringify({minimumSol,maxFeeSol,enabled})]);});return {success:true};
+}));
+router.get('/admin/review',handle(async()=>{const [swaps]=await db.query("SELECT id,user_id,mint,status,signature,error_code FROM solana_swaps WHERE status='review' ORDER BY created_at LIMIT 100");const [tokens]=await db.query("SELECT * FROM solana_receipts WHERE status='review' ORDER BY created_at DESC LIMIT 100");return {swaps,tokens};}));
+export default router;

@@ -7,11 +7,17 @@
     "start": "node server.js",
     "dev": "node server.js",
     "migrate": "node scripts/migrate-db.js",
+    "wallets:backfill-trx": "node scripts/backfill-trx-wallets.js",
+    "wallets:repair": "node scripts/repair-wallets.js",
     "test": "node --test"
   },
   "dependencies": {
+    "@pump-fun/pump-sdk": "4.3.1",
+    "@solana/web3.js": "^1.99.0",
     "bcryptjs": "^3.0.3",
     "bitcoinjs-lib": "^7.0.1",
+    "bn.js": "5.2.5",
+    "bs58": "^5.0.0",
     "cors": "^2.8.5",
     "decimal.js": "^10.6.0",
     "dotenv": "^16.4.7",
@@ -22,6 +28,10 @@
     "mysql2": "^3.15.3",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.8.3",
+    "tronweb": "^6.5.0",
     "uuid": "^14.0.0"
+  },
+  "optionalDependencies": {
+    "bufferutil": "4.1.0"
   }
 }

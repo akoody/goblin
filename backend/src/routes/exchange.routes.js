@@ -1,4 +1,6 @@
 import express from "express";
+import {requireAccountFeature} from '../middleware/account-feature.js';
+import { auth } from "../middleware/auth.js";
 import { cancelOrder, closeFuturesPosition, getExchangeState, placeOrder } from "../services/exchange.service.js";
 import { getMarketSnapshot } from "../services/market-data.service.js";
 
@@ -16,6 +18,9 @@ router.get("/market/:symbol", async (req, res) => {
     handleError(res, error);
   }
 });
+
+router.use(auth);
+router.use(requireAccountFeature('trading'));
 
 router.get("/state", async (req, res) => {
   try {

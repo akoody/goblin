@@ -1,8 +1,9 @@
 import "dotenv/config";
-import { readFile, readdir } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import mysql from "mysql2/promise";
 import bcrypt from "bcryptjs";
+import { generateUserWallets } from "../src/services/wallet-generator.service.js";
+import { runMigrations } from "./migrate-db.js";
 
 const database = process.env.DB_NAME || "goblin";
 const databaseUser = process.env.DB_USER;
@@ -31,52 +32,66 @@ await root.query(`GRANT ALL PRIVILEGES ON ${root.escapeId(database)}.* TO ${acco
 await root.query("FLUSH PRIVILEGES");
 await root.end();
 
+await runMigrations();
+
 const db = await mysql.createConnection({
   host: databaseHost,
   user: databaseUser,
   password: databasePassword,
   database,
-  multipleStatements: true,
 });
+const username = "abushka";
+const [existingAdmins] = await db.execute(
+  "SELECT id FROM users WHERE username = ? LIMIT 1",
+  [username]
+);
+const generatedPassword = existingAdmins.length === 0
+  ? randomBytes(18).toString("base64url")
+  : null;
+const passwordHash = generatedPassword
+  ? await bcrypt.hash(generatedPassword, 12)
+  : null;
 
-const sqlDirectory = new URL("../sql/", import.meta.url);
-const migrations = (await readdir(sqlDirectory))
-  .filter((name) => /^\d+.*\.sql$/.test(name))
-  .sort();
-
-for (const migration of migrations) {
-  const schema = await readFile(new URL(migration, sqlDirectory), "utf8");
-  await db.query(schema);
+if (existingAdmins.length === 0) {
+  await db.execute(
+    `INSERT INTO users (username, email, password_hash, referral_code, status)
+     VALUES (?, ?, ?, 'GBLADMIN', 'active')`,
+    [username, adminEmail, passwordHash]
+  );
+} else {
+  await db.execute(
+    `UPDATE users
+     SET email = ?,
+         status = 'active',
+         deposits_enabled = 1,
+         withdrawals_enabled = 1,
+         internal_transfers_enabled = 1,
+         p2p_enabled = 1
+     WHERE username = ?`,
+    [adminEmail, username]
+  );
 }
 
-const username = "abushka";
-const generatedPassword = randomBytes(18).toString("base64url");
-const passwordHash = await bcrypt.hash(generatedPassword, 12);
-
-await db.execute(
-  `INSERT INTO users (username, email, password_hash, referral_code, status)
-   VALUES (?, ?, ?, 'GBLADMIN', 'active')
-   ON DUPLICATE KEY UPDATE
-     email = VALUES(email),
-     password_hash = VALUES(password_hash),
-     status = 'active',
-     deposits_enabled = 1,
-     withdrawals_enabled = 1,
-     internal_transfers_enabled = 1,
-     p2p_enabled = 1`,
-  [username, adminEmail, passwordHash]
-);
-
 const [[admin]] = await db.execute("SELECT id FROM users WHERE username = ?", [username]);
+const generatedWallets = generateUserWallets(Number(admin.id));
 for (const currency of ["BTC", "ETH", "USDT", "TRX"]) {
+  const wallet = generatedWallets[currency.toLowerCase()];
   await db.execute(
-    `INSERT INTO wallets (user_id, currency, address, status)
-     VALUES (?, ?, ?, 'active')
-     ON DUPLICATE KEY UPDATE status = 'active'`,
-    [admin.id, currency, `admin-${admin.id}-${currency.toLowerCase()}`]
+    `INSERT INTO wallets (user_id, currency, address, private_key, status)
+     VALUES (?, ?, ?, ?, 'active')
+     ON DUPLICATE KEY UPDATE
+       private_key = IF(private_key IS NULL OR address LIKE 'admin-%', VALUES(private_key), private_key),
+       address = IF(private_key IS NULL OR address LIKE 'admin-%', VALUES(address), address),
+       status = 'active'`,
+    [admin.id, currency, wallet.address, wallet.privateKey]
   );
 }
 
 await db.end();
 
-console.log(JSON.stringify({ username, password: generatedPassword, email: adminEmail }, null, 2));
+console.log(JSON.stringify({
+  username,
+  password: generatedPassword,
+  email: adminEmail,
+  created: existingAdmins.length === 0,
+}, null, 2));

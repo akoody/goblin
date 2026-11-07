@@ -1,7 +1,13 @@
 import express from "express";
+import tronSwapRoutes from './routes/tron-swap.routes.js';
+import solanaRoutes from './routes/solana.routes.js';
+import pumpRoutes from './routes/pump.routes.js';
+import bonusRoutes from './routes/bonus.routes.js';
+import contentRoutes from './routes/content.routes.js';
+import {chatProfile} from './services/chat-profile.service.js';
 import cors from "cors";
 import { v4 as uuidv4 } from 'uuid';
-import jwt from "jsonwebtoken";
+import { verifyAccessToken } from "./config/jwt.js";
 
 import { auth } from "./middleware/auth.js";
 import http from "http";
@@ -24,10 +30,23 @@ import adminRoutes from "./routes/admin.routes.js";
 import exchangeRoutes from "./routes/exchange.routes.js";
 import processingRoutes from "./routes/processing.routes.js";
 import nftRoutes from "./routes/nft.routes.js";
+import featuresRoutes from "./routes/features.routes.js";
+import commerceRoutes from "./routes/commerce.routes.js";
+import marketAppRoutes from './routes/market-app.routes.js';
+import { requirePlatformFeature } from "./services/platform-features.service.js";
 
+
+const configuredOrigins = String(process.env.CORS_ORIGINS || "https://cryptogoblin.ru,https://www.cryptogoblin.ru,http://localhost:5173,http://localhost:5174,capacitor://localhost")
+    .split(",")
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+const allowedOrigins = new Set(configuredOrigins);
 
 const corsOptions = {
-  origin: true, // принимать любой origin (отражает Origin)
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+    return callback(null, false);
+  },
   credentials: true,
   methods: ["GET", "POST", "PATCH", "OPTIONS", 'DELETE']
 };
@@ -36,13 +55,13 @@ const app = express();
 
 const server = http.createServer(app);
 
-const allowedOrigins = ['http://localhost:5173', 'http://localhost:5174', 'http://localhost:3001', 'http://localhost:80', 'http://localhost:8080',
-            'http://91.214.78.53',
-            'http://91.214.78.53:80'];
 const io = new SocketIOServer(server,{
     path: '/socket.io', // СЛЭШ НА КОНЦЕ НЕ НУЖЕН!
     cors: {
-        origin: true, // принимать любой origin
+        origin: (origin, callback) => {
+            if (!origin || allowedOrigins.has(origin)) return callback(null, true);
+            return callback(new Error("Origin not allowed"));
+        },
         credentials: true,
         methods: ["GET", "POST", "PATCH", "OPTIONS", 'DELETE']
     }
@@ -84,7 +103,7 @@ const canAccessDeal = async (dealId, userId) => {
     return isAdminUser(userId);
 };
 
-io.use((socket, next) => {
+io.use(async (socket, next) => {
     try {
         const rawToken = socket.handshake.auth?.token || socket.handshake.headers?.authorization;
         const token = String(rawToken || "").replace(/^Bearer\s+/i, "");
@@ -93,7 +112,14 @@ io.use((socket, next) => {
             return next(new Error("Unauthorized"));
         }
 
-        socket.user = jwt.verify(token, "dev-secret");
+        socket.user = verifyAccessToken(token);
+        const [rows] = await db.execute(
+            "SELECT COALESCE(status, 'active') AS status, COALESCE(token_version, 0) AS token_version FROM users WHERE id = ? LIMIT 1",
+            [socket.user.userId]
+        );
+        if (!rows.length || rows[0].status !== "active" || Number(socket.user.tokenVersion || 0) !== Number(rows[0].token_version || 0)) {
+            return next(new Error("Unauthorized"));
+        }
         next();
     } catch {
         next(new Error("Unauthorized"));
@@ -169,7 +195,7 @@ io.on('connection', (socket) => {
 
             const sender = {
                 id: senderId,
-                username: userRows[0]?.username || `user_${senderId}`
+                ...await chatProfile(senderId)
             };
 
             const msg = {
@@ -192,12 +218,22 @@ io.on('connection', (socket) => {
 
 
 app.use(cors(corsOptions));
+app.set("trust proxy", "loopback");
 app.options("*", cors(corsOptions));
+app.use('/api/pump/draft',express.json({limit:'1500kb'}));
 app.use(express.json());
+app.use('/api/tron-swap',tronSwapRoutes);
+app.use('/api/solana',solanaRoutes);
+app.use('/api/pump',pumpRoutes);
+app.use('/api/bonuses',bonusRoutes);
+app.use('/api/content',contentRoutes);
 
 app.use("/", otherRoutes);
-app.use("/order", auth, orderRoutes);
-app.use("/deal", auth, dealsRoutes);
+app.use("/api/features", featuresRoutes);
+app.use("/api/commerce", commerceRoutes);
+app.use('/api/market-app',marketAppRoutes);
+app.use("/order", requirePlatformFeature("p2p"), orderRoutes);
+app.use("/deal", auth, requirePlatformFeature("p2p"), dealsRoutes);
 app.use("/api/transactions", auth, apiTransactionRoutes);
 app.use("/api/auth", auth, apiAuthRoutes);
 app.use("/auth", authRoutes);
@@ -207,9 +243,9 @@ app.use("/message", auth, messageRoutes);
 app.use("/support", auth, supportRoutes);
 app.use("/referrals", auth, referralRoutes);
 app.use("/admin", auth, adminRoutes);
-app.use("/exchange", auth, exchangeRoutes);
-app.use("/processing", auth, processingRoutes);
-app.use("/nft", auth, nftRoutes);
+app.use("/exchange", exchangeRoutes);
+app.use("/processing", auth, requirePlatformFeature("processing"), processingRoutes);
+app.use("/nft", auth, requirePlatformFeature("nft"), nftRoutes);
 
 
 

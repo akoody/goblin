@@ -1,0 +1,38 @@
+CREATE TABLE native_chain_policy (
+ currency VARCHAR(8) PRIMARY KEY,
+ deposits_enabled TINYINT NOT NULL DEFAULT 0,
+ withdrawals_enabled TINYINT NOT NULL DEFAULT 0,
+ withdrawal_fee_usd DECIMAL(12,2) NOT NULL DEFAULT 1,
+ minimum_withdrawal_usd DECIMAL(12,2) NOT NULL DEFAULT 10,
+ collection_mode VARCHAR(16) NOT NULL DEFAULT 'manual',
+ collection_threshold DECIMAL(36,18) NOT NULL,
+ minimum_source DECIMAL(36,18) NOT NULL,
+ maximum_network_fee DECIMAL(36,18) NOT NULL,
+ updated_by BIGINT UNSIGNED NULL,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO native_chain_policy(currency,collection_threshold,minimum_source,maximum_network_fee)
+ VALUES('BTC',0.001,0.0001,0.00005),('ETH',0.05,0.0025,0.001);
+CREATE TABLE native_chain_cursor (
+ currency VARCHAR(8) PRIMARY KEY, block_height BIGINT UNSIGNED NOT NULL,
+ block_hash VARCHAR(80) NOT NULL, updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE native_chain_jobs (
+ id CHAR(36) PRIMARY KEY, currency VARCHAR(8) NOT NULL, kind VARCHAR(16) NOT NULL,
+ user_id BIGINT UNSIGNED NULL, actor_id BIGINT UNSIGNED NULL,
+ request_key VARCHAR(128) NOT NULL UNIQUE,
+ status VARCHAR(16) NOT NULL DEFAULT 'draft', plan_json JSON NOT NULL,
+ signed_hex MEDIUMTEXT NULL, tx_hash VARCHAR(80) NULL UNIQUE,
+ network_fee DECIMAL(36,18) NULL, received DECIMAL(36,18) NULL,
+ error_code VARCHAR(80) NULL, expires_at TIMESTAMP NOT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ KEY idx_native_jobs(status,updated_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+CREATE TABLE native_fee_ledger (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY, job_id CHAR(36) NOT NULL,
+ wallet_id BIGINT UNSIGNED NOT NULL, currency VARCHAR(8) NOT NULL,
+ kind VARCHAR(24) NOT NULL, amount DECIMAL(36,18) NOT NULL,
+ created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+ UNIQUE KEY uq_native_fee(job_id,wallet_id,kind)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

@@ -1,4 +1,5 @@
 import express from "express";
+import { hasStaffPermission,staffAccess } from '../services/staff-access.service.js';
 import { v4 as uuidv4 } from "uuid";
 import { db } from "../config/db.js";
 
@@ -26,25 +27,21 @@ const sanitizeCategory = (value) => {
 };
 
 const isAdminUser = async (userId) => {
-  const adminEmails = getAdminEmails();
-  if (adminEmails.length === 0) return false;
-
-  const [rows] = await db.execute("SELECT email FROM users WHERE id = ?", [userId]);
-  return adminEmails.includes(normalizeEmail(rows[0]?.email));
+  return hasStaffPermission(userId,'chat');
 };
 
-const buildAdminEmailPredicate = (alias, operator = "IN") => {
+const buildAdminEmailPredicate = (alias, operator = "IN",messageAlias) => {
   const adminEmails = getAdminEmails();
 
   if (adminEmails.length === 0) {
     return {
-      sql: operator === "IN" ? "1 = 0" : "1 = 1",
+      sql: `(COALESCE(${messageAlias}.staff_role,'client') ${operator==='IN'?'=':'!='} 'operator')`,
       params: [],
     };
   }
 
   return {
-    sql: `LOWER(${alias}.email) ${operator} (${adminEmails.map(() => "?").join(",")})`,
+    sql: `(COALESCE(${messageAlias}.staff_role,IF(LOWER(${alias}.email) IN (${adminEmails.map(() => "?").join(",")}), 'operator','client')) ${operator==='IN'?'=':'!='} 'operator')`,
     params: adminEmails,
   };
 };
@@ -75,7 +72,7 @@ const formatMessage = (row, adminEmails = getAdminEmails()) => ({
     id: row.sender_id,
     username: row.username,
     email: row.email,
-    role: adminEmails.includes(normalizeEmail(row.email)) ? "operator" : "client",
+    role: row.staff_role || (adminEmails.includes(normalizeEmail(row.email)) ? "operator" : "client"),
   },
 });
 
@@ -92,8 +89,8 @@ const canAccessTicket = async (ticketId, userId) => {
 };
 
 const getTicketById = async (ticketId, admin = false) => {
-  const clientUnread = buildAdminEmailPredicate("su_client_unread", "IN");
-  const operatorUnread = buildAdminEmailPredicate("su_operator_unread", "NOT IN");
+  const clientUnread = buildAdminEmailPredicate("su_client_unread", "IN",'sm_client_unread');
+  const operatorUnread = buildAdminEmailPredicate("su_operator_unread", "NOT IN",'sm_operator_unread');
 
   const [rows] = await db.execute(
     `SELECT t.*,
@@ -137,8 +134,8 @@ router.get("/tickets", async (req, res) => {
     const admin = await isAdminUser(userId);
     const status = sanitizeText(req.query.status, 32);
     const params = [];
-    const clientUnread = buildAdminEmailPredicate("su_client_unread", "IN");
-    const operatorUnread = buildAdminEmailPredicate("su_operator_unread", "NOT IN");
+    const clientUnread = buildAdminEmailPredicate("su_client_unread", "IN",'sm_client_unread');
+    const operatorUnread = buildAdminEmailPredicate("su_operator_unread", "NOT IN",'sm_operator_unread');
 
     let where = admin ? "1=1" : "t.user_id = ?";
     if (!admin) params.push(userId);
@@ -300,8 +297,8 @@ router.post("/tickets/:id/messages", async (req, res) => {
 
     const messageId = uuidv4();
     await db.execute(
-      "INSERT INTO support_messages (id, ticket_id, sender_id, text) VALUES (?, ?, ?, ?)",
-      [messageId, ticketId, userId, text]
+      "INSERT INTO support_messages (id, ticket_id, sender_id, text,staff_role) VALUES (?, ?, ?, ?,?)",
+      [messageId, ticketId, userId, text,access.admin?'operator':'client']
     );
 
     await db.execute(
@@ -338,6 +335,7 @@ router.post("/tickets/:id/reopen", async (req, res) => {
     }
 
     const access = await canAccessTicket(ticketId, userId);
+    if(access.admin && access.ticket?.user_id!==userId && (await staffAccess(userId)).role!=='admin')return res.status(403).json({message:'Хелпер может отвечать в чате, изменение обращения доступно администратору'});
     if (!access.allowed) {
       return res.status(403).json({ message: "Access denied" });
     }
@@ -368,7 +366,7 @@ router.patch("/tickets/:id", async (req, res) => {
       return res.status(400).json({ message: "Invalid status" });
     }
 
-    const admin = await isAdminUser(userId);
+    const admin = (await staffAccess(userId)).role==='admin';
     if (!admin) {
       return res.status(403).json({ message: "Admin access required" });
     }
