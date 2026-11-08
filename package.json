@@ -31,7 +31,7 @@
     "android:debug": "npm run android:sync && cd android && ./gradlew assembleDebug",
     "android:release": "npm run android:sync && cd android && ./gradlew assembleRelease",
     "android:bundle": "npm run android:sync && cd android && ./gradlew bundleRelease",
-    "test": "echo 'No tests configured'",
+    "test": "npm --prefix backend test",
     "eject": "echo 'Eject not available with Vite'",
     "tw": "tailwindcss -i ./src/index.css -o ./src/output.css --watch"
   },
