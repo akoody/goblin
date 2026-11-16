@@ -1,8 +1,8 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { chromium } from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright-core';
 const fixture=JSON.parse(fs.readFileSync(process.env.MARKET_UI_FIXTURE,'utf8'));
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 const base='https://cryptogoblin.ru',errors=[];
 const context=await browser.newContext();
 await context.addCookies([{name:'goblin_market_session',value:fixture.users[0].token,domain:'cryptogoblin.ru',path:'/',httpOnly:true,secure:true,sameSite:'Lax'}]);

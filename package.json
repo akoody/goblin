@@ -54,6 +54,7 @@
     "@tailwindcss/postcss": "^4.1.18",
     "@vitejs/plugin-react": "^5.1.0",
     "autoprefixer": "^10.4.27",
+    "playwright-core": "^1.65.1",
     "postcss": "^8.5.9",
     "sass": "^1.93.3",
     "tailwindcss": "^4.3.0",

@@ -1,9 +1,9 @@
 import fs from 'node:fs';
 import assert from 'node:assert/strict';
-import { chromium } from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright-core';
 const f=JSON.parse(fs.readFileSync(process.env.MARKET_UI_FIXTURE,'utf8')),base='https://cryptogoblin.ru';
 const password=process.env.MARKET_QA_PASSWORD||f.qaPassword;
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 try {
   const seller=await browser.newContext();await seller.addCookies([{name:'goblin_market_session',value:f.users[1].token,domain:'cryptogoblin.ru',path:'/',httpOnly:true,secure:true,sameSite:'Lax'}]);
   const page=await seller.newPage();await page.goto(base+'/market/catalog/'+f.itemSlug+'/sell');

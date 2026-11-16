@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import * as domain from '../backend/market-runtime/db.js';
 import {populatedMarketFixture} from '../backend/test/fixtures/market-store.js';
-import {chromium} from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright-core';
 
 let payload=populatedMarketFixture();let slug;
 const popularity=new Map(payload.catalogItems.slice(1,4).map((item,index)=>[item.slug,{accounts:10-index,services:10-index}]));
@@ -28,7 +28,7 @@ const server=http.createServer(async(req,res)=>{
   res.end(JSON.stringify({result:result??null}));
 });
 await new Promise(resolve=>server.listen(5199,'127.0.0.1',resolve));
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 try{
   for(const width of [320,390,768,1440]){
     const page=await browser.newPage({viewport:{width,height:900}}),errors=[];page.on('pageerror',e=>errors.push(e.message));

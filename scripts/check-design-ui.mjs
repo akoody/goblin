@@ -1,11 +1,11 @@
-import { chromium } from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright-core';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 const base=process.env.DESIGN_UI_BASE||'http://127.0.0.1:5178';
 const email=(fs.readFileSync('.env','utf8').match(/^VITE_ADMIN_EMAILS=(.*)$/m)?.[1]||'').replace(/^['"]|['"]$/g,'').split(/[,;\n]/)[0].trim();
 const token='eyJhbGciOiJIUzI1NiJ9.'+Buffer.from(JSON.stringify({userId:1,email,exp:9999999999})).toString('base64url')+'.mock';
 const wallets=['USDT','BTC','ETH','TRX'].map((currency,index)=>({id:index+1,currency,balance:currency==='USDT'?'123.456789':'0.00012345',locked_balance:'0',network:{network:'TRON',standard:'TRC-20'},processing:{depositsEnabled:false,withdrawalsEnabled:false}}));
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 let checks=0;const failures=[];
 try{
  for(const width of [320,390,768,1024,1440,1920])for(const authenticated of [false,true]){
