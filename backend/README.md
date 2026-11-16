@@ -32,3 +32,7 @@ PASSWORD_RESET_SECRET=long-random-secret
 ```
 
 После добавления миграции `008_password_resets.sql` выполните `npm run migrate` и перезапустите backend. Для отправки с адреса на `cryptogoblin.ru` домен должен быть подтверждён в Resend.
+
+## Подробнее
+
+Сети и процессинг (Bitcoin, Ethereum, Solana, TRON, Pump.fun, Safio, казна) описаны в [docs/backend](../docs/backend/).
