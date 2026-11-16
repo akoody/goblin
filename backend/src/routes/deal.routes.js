@@ -1,4 +1,5 @@
 import express from "express";
+import {notifyDealEvent} from '../services/push.service.js';
 import { hasStaffPermission } from '../services/staff-access.service.js';
 import {db} from "../config/db.js";
 import { reserveUsdt, consumeUsdtReservation, releaseUsdtReservation } from "../services/wallet-reservation.service.js";
@@ -236,6 +237,7 @@ router.post('/', async (req, res) => {
 
         await connection.commit();
 
+        notifyDealEvent('p2p',result.insertId,'deal_created');
         const [dealRows] = await db.execute(
             `${dealSelect} WHERE d.id = ?`,
             [result.insertId]
@@ -502,6 +504,7 @@ router.patch('/:id/status', async (req, res) => {
 
         await connection.commit();
 
+        if(status!==deal.status)notifyDealEvent('p2p',id,{PAYMENT_CONFIRMED:'deal_paid',COMPLETED:'deal_completed',CANCELLED:'deal_cancelled',DISPUTE:'deal_disputed'}[status]);
         const [updatedDealRows] = await connection.execute(
             `${dealSelect} WHERE d.id = ?`,
             [id]

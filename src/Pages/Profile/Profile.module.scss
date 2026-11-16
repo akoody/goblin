@@ -1247,3 +1247,39 @@
 
   svg { color: var(--primary-deep); font-size: 28px; }
 }
+.marketUsdtTransfer {
+  display: grid;
+  gap: 12px;
+  padding: 20px;
+  border: 1px solid #e1e9e3;
+  border-radius: 14px;
+  background: #fff;
+
+  h3, p { margin: 0; }
+  > div {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: end;
+    gap: 12px;
+  }
+  label {
+    flex: 1 1 160px;
+    min-width: 0;
+    display: grid;
+    gap: 6px;
+  }
+  input, select, button {
+    min-height: 42px;
+    padding: 8px 12px;
+    border: 1px solid #d5e0d7;
+    border-radius: 8px;
+    font: inherit;
+  }
+  button {
+    background: #216341;
+    color: #fff;
+    cursor: pointer;
+    &:disabled { opacity: .6; cursor: default; }
+  }
+  [role='alert'] { color: #a12a27; }
+}

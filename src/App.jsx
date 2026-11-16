@@ -5,6 +5,8 @@ import { Header } from "./Components/Header/Header";
 import { SnackbarProvider } from "notistack";
 import { useLocation } from "react-router-dom";
 import { captureReferral } from './utils/referralAttribution';
+import {PushNotificationsBridge} from './Components/PushNotifications/PushNotificationsBridge';
+import {IosPush} from './Components/PushNotifications/IosPush';
 
 const Layout = ({ children }) => {
   const location = useLocation();
@@ -14,6 +16,8 @@ const Layout = ({ children }) => {
 
   return (
     <div className={isAuthPage ? "app app_auth" : "app"}>
+      <PushNotificationsBridge/>
+      <IosPush/>
       {!isAuthPage && <Header />}
       {children}
     </div>

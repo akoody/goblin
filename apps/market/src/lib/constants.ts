@@ -1,4 +1,3 @@
-import type { CurrencyCode } from "@/lib/db";
 import type { CatalogFamily, CatalogKind } from "@/lib/marketplace-catalog";
 
 export const categories = [
@@ -6,22 +5,6 @@ export const categories = [
   "Сервисы",
   "Платформы",
 ];
-
-export const supportedCurrencies: Array<{
-  code: CurrencyCode;
-  label: string;
-  symbol: string;
-}> = [
-  { code: "RUB", label: "Рубли", symbol: "₽" },
-  { code: "USD", label: "Доллары", symbol: "$" },
-  { code: "EUR", label: "Евро", symbol: "€" },
-];
-
-export const currencyRates: Record<CurrencyCode, number> = {
-  RUB: 1,
-  USD: 92,
-  EUR: 100,
-};
 
 export const catalogKindLabels: Record<CatalogKind, string> = {
   GAME: "Игра",

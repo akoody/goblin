@@ -1,5 +1,6 @@
 import express from "express";
 import { db } from "../config/db.js";
+import {effectiveReferralRate} from '../services/referral-commission-policy.service.js';
 
 const router = express.Router();
 
@@ -33,22 +34,25 @@ router.get("/me", async (req, res) => {
     );
 
     const [rewards] = await db.execute(
-      `SELECT COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
+      `SELECT currency,COALESCE(SUM(amount), 0) AS total, COUNT(*) AS count
        FROM referral_rewards
-       WHERE referrer_id = ?`,
+       WHERE referrer_id = ? GROUP BY currency ORDER BY currency`,
       [userId]
     );
+    const rate=await effectiveReferralRate(userId);
 
     const [[referrer]] = user.referred_by
       ? await db.execute("SELECT id, username, email, referral_code FROM users WHERE id = ?", [user.referred_by])
       : [[]];
 
-    res.json({
+    res.set('Cache-Control','no-store').json({
       code: referralCode,
-      ratePercent: 10,
+      ...rate,
       invitedCount: invites.length,
-      rewardTotal: Number(rewards[0]?.total || 0),
-      rewardCount: Number(rewards[0]?.count || 0),
+      rewardTotal: Number(rewards.find(r=>r.currency==='USDT')?.total || 0),
+      rewardCount: rewards.reduce((n,r)=>n+Number(r.count),0),
+      rewardBalances:rewards.map(r=>({currency:r.currency,amount:String(r.total),count:Number(r.count)})),
+      accrualEnabled:true,
       invitedUsers: invites.map((invite) => ({
         id: invite.id,
         username: invite.username,

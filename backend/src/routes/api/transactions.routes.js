@@ -4,6 +4,7 @@ import {nativeAmount} from '../../services/native-chain-policy.js';
 import {createRateLimit} from '../../middleware/rate-limit.js';
 import {quoteNativeWithdrawal,executeNativePlan,nativePlan} from '../../services/native-chain.service.js';
 import {walletAssets} from '../../services/wallet-assets.service.js';
+import {tronPollSchedule} from '../../services/tron-poll-schedule.js';
 import { db } from "../../config/db.js";
 import { send } from "../../services/transactions.service.js";
 import {
@@ -177,11 +178,12 @@ router.get('/balance', async (req, res) => {
 
 
         const [rows] = await db.execute(
-            `SELECT currency, balance, COALESCE(locked_balance, 0) AS locked_balance, address
+            `SELECT id, currency, balance, COALESCE(locked_balance, 0) AS locked_balance, address
              FROM wallets
              WHERE user_id=?;`, [userId]
         );
 
+        for(const wallet of rows)if(['USDT','TRX'].includes(wallet.currency)&&wallet.address)tronPollSchedule.watch(wallet.id);
         const [nativePolicies]=await db.query('SELECT currency,deposits_enabled,withdrawals_enabled,aml_disabled FROM native_chain_policy');
         const capabilities=currency=>{
             const base=externalWalletProcessing.assets[String(currency).toUpperCase()]||{depositsEnabled:false,withdrawalsEnabled:false};

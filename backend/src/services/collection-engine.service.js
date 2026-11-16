@@ -1,5 +1,6 @@
 import {randomUUID} from 'node:crypto';
 import Decimal from 'decimal.js';
+import {referralCustody,referralCustodyBalances} from './referral-accrual.service.js';
 import {db} from '../config/db.js';
 import {transact} from './commerce.service.js';
 import {decryptWalletPrivateKey} from './wallet-generator.service.js';
@@ -30,7 +31,8 @@ async function globalAvailable(c,network,excludedId=''){
  const currency=network==='TRON'?'USDT':'SOL';
  const [[treasury]]=await c.execute('SELECT balance FROM admin_treasury WHERE currency=?',[currency]);
  const [[held]]=await c.execute(`SELECT COALESCE(SUM(CASE WHEN status='completed' THEN received WHEN status IN ${active} THEN amount ELSE 0 END),0) AS amount FROM treasury_collection_jobs WHERE network=? AND id<>?`,[network,excludedId]);
- return Decimal.max(0,new Decimal(treasury?.balance||0).minus(held.amount));
+ const [[paid]]=await c.execute("SELECT COALESCE(SUM(CASE WHEN status IN ('confirmed','prepared','submitted','review') THEN gross_amount WHEN status='failed' AND currency<>'USDT' THEN fee_charged ELSE 0 END),0) amount FROM treasury_payouts WHERE currency=?",[currency]);
+ return Decimal.max(0,new Decimal(treasury?.balance||0).minus(held.amount).plus(paid.amount));
 }
 async function inspectSource(c,userId,network,destination,excludedId=''){
  const [[recentFailure]]=await c.execute("SELECT id FROM treasury_collection_jobs WHERE user_id=? AND network=? AND status='failed' AND updated_at>DATE_SUB(NOW(),INTERVAL 1 HOUR) LIMIT 1",[userId,network]);
@@ -53,19 +55,22 @@ async function inspectSource(c,userId,network,destination,excludedId=''){
   const [[transfer]]=await c.execute("SELECT t.id FROM transactions t JOIN users u ON u.id=? WHERE t.currency IN ('USDT','TRX') AND t.type='internal' AND (t.from_address=? OR t.to_address=? OR LOWER(t.to_address)=LOWER(u.email)) LIMIT 1",[userId,wallet.address,wallet.address]);
   const [[deal]]=await c.execute("SELECT id FROM deals WHERE (buyer_id=? OR seller_id=?) AND status='COMPLETED' LIMIT 1",[userId,userId]);
   const [[escrow]]=await c.execute("SELECT id FROM commerce_deals WHERE (buyer_id=? OR seller_id=?) AND funded_at IS NOT NULL LIMIT 1",[userId,userId]);
-  if(transfer||deal||escrow)fail('История требует адресной сверки: внутренние переводы/P2P/гарант','PROVENANCE_REVIEW');
+  const [[marketTransfer]]=await c.execute('SELECT request_key FROM market_usdt_transfers WHERE user_id=? LIMIT 1',[userId]);
+  if(transfer||deal||escrow||marketTransfer)fail('История требует адресной сверки: внутренние переводы/P2P/гарант/маркет','PROVENANCE_REVIEW');
  }else{
   const [[swap]]=await c.execute("SELECT id FROM solana_swaps WHERE user_id=? AND status IN ('prepared','submitted','review') LIMIT 1",[userId]);
   const [[launch]]=await c.execute("SELECT id FROM pump_launches WHERE user_id=? AND status IN ('prepared','submitted','review') LIMIT 1",[userId]);
   if(swap||launch)fail('Ожидается завершение обмена или создания монеты','SOURCE_BUSY');
  }
- const earned=await sourceFees(c,userId,network,wallet.address);if(earned.lte(0))fail('Нет комиссии с подтверждённым источником','NO_ATTRIBUTED_FEES');
+ const covered=referralCustodyBalances(wallet.balance,(await sourceFees(c,userId,network,wallet.address)).toFixed(),await referralCustody(c,userId,wallet.currency));
+ const earned=new Decimal(covered.earned);if(earned.lte(0))fail('Нет комиссии с подтверждённым источником','NO_ATTRIBUTED_FEES');
  const chain=await collectionChainBalance(network,wallet.address);
- reconcileOwnedFunds({chain:chain.asset,liability:collectionUnits(wallet.balance,network),earned:collectionUnits(earned,network)});
+ reconcileOwnedFunds({chain:chain.asset,liability:collectionUnits(covered.liability,network),earned:collectionUnits(earned,network)});
  let gas;
  if(network==='TRON'){
   gas=await sourceGas(c,userId,wallet.address);const trx=wallets.find(w=>w.currency==='TRX');
-  reconcileOwnedFunds({chain:chain.gas,liability:collectionUnits(trx.balance,'TRON'),earned:collectionUnits(gas.earned.plus(gas.operational),'TRON')});
+  const gasCoverage=referralCustodyBalances(trx.balance,gas.earned.plus(gas.operational).toFixed(),await referralCustody(c,userId,'TRX'));
+  reconcileOwnedFunds({chain:chain.gas,liability:collectionUnits(gasCoverage.liability,'TRON'),earned:collectionUnits(gasCoverage.earned,'TRON')});
  }
  return {wallet,wallets,earned,gas};
 }
@@ -165,6 +170,8 @@ export async function settleCollection(job,success,fee,status=success?'completed
  });
 }
 async function ensureGas(job,source){
+ const [[payout]]=await db.query("SELECT id FROM treasury_payouts WHERE currency='USDT' AND status IN ('prepared','submitted','review') LIMIT 1");
+ if(payout)fail('Казна TRON занята выплатой','SOURCE_BUSY');
  const [[existing]]=await db.execute('SELECT * FROM treasury_collection_gas_grants WHERE job_id=?',[job.id]);
  if(existing){
   if(existing.status==='review')fail('Нужна проверка пополнения газа','GAS_GRANT_REVIEW');

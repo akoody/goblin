@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from 'node:assert/strict';
 import {launchInput,solUnits} from '../src/services/pump-launch-validation.js';
 import {settleLaunch} from '../src/services/pump-launch.service.js';
@@ -12,6 +13,7 @@ test('Launch prices are exact; first purchase is separate from service fee',()=>
 test('Launch settlement charges service fee only on success and credits once',async()=>{
  const original=db.getConnection;let current='prepared',treasury=0,token=0,debit;
  db.getConnection=async()=>({beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release(){},execute:async(sql,args)=>{
+  const referral=noReferrer(sql);if(referral)return referral;
   if(sql.startsWith('SELECT status'))return [[{status:current}]];
   if(sql.startsWith('UPDATE wallets')){debit=args;return [{affectedRows:1}];}
   if(sql.startsWith('INSERT INTO solana_holdings')){token++;return [{}];}

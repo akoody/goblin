@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from 'node:assert/strict';
 import {Wallet} from 'ethers';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -19,6 +20,7 @@ test('No-AML scope requires explicit BTC policy and discovery snapshot, never ot
 test('New BTC discovery snapshots no-AML mode; other deposits keep AML unchanged',async()=>{
  const old=db.getConnection;let enabled=1,inserted;
  db.getConnection=async()=>({beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release(){},execute:async(sql,args)=>{
+  const referral=noReferrer(sql);if(referral)return referral;
   if(sql.startsWith('SELECT fee_usd'))return [[{fee_usd:'2',min_usd:'5'}]];
   if(sql.startsWith('SELECT aml_disabled'))return [[{aml_disabled:enabled}]];
   if(sql.startsWith('INSERT INTO deposit_reviews'))inserted=args;
@@ -50,6 +52,7 @@ test('Unscreened BTC credit keeps chain proof, minimum and fees; records NOT_SCR
  db.execute=async()=>[[{currency}]];
  db.getConnection=async()=>({beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release(){},execute:async(sql,args)=>{
   if(sql.startsWith('SELECT d.*'))return [[{id:1,wallet_id:1,currency:'BTC',network:'BITCOIN',status,aml_exempt:exempt,amount:'0.0001',fee_usd:'2',min_usd:'5',tx_hash:tx.getId(),from_address:'sender',to_address:address}]];
+  const referral=noReferrer(sql);if(referral)return referral;
   if(sql.startsWith('SELECT currency,aml_disabled'))return [[{currency:'BTC',aml_disabled:policyEnabled,deposits_enabled:1}]];
   if(sql.includes('deposit_aml_checks'))throw new Error('A fake AML check must never be consulted');
   if(sql.startsWith('SELECT w.*'))return [[{id:1,user_id:1,address,balance:'0',status:'active',user_status:'active',deposits_enabled:1}]];

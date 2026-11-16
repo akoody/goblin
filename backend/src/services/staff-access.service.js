@@ -1,7 +1,7 @@
 import { db } from '../config/db.js';
 import { transact } from './commerce.service.js';
 
-export const helperPermissions = Object.freeze({chat:'Чаты поддержки',security:'Безопасность: история входов',p2p:'P2P-сделки: просмотр',transactions:'Транзакции биржи: просмотр',referrals:'Приглашения и реферальные ссылки',balances:'Балансы пользователей: просмотр'});
+export const helperPermissions = Object.freeze({chat:'Чаты поддержки',security:'Безопасность: история входов',p2p:'P2P-сделки: просмотр',transactions:'Транзакции биржи: просмотр',referrals:'Приглашения и реферальные ссылки',balances:'Балансы пользователей: просмотр',content:'Новости и о проекте'});
 const normalize = value => String(value || '').trim().toLowerCase();
 export function isAdministratorEmail(email) {
   return String(process.env.ADMIN_EMAILS || process.env.VITE_ADMIN_EMAILS || '').split(/[,;\n]/).map(normalize).filter(Boolean).includes(normalize(email));
@@ -21,7 +21,7 @@ export function helperRoutePermission(method,path) {
   if(method==='GET'&&(path==='/wallet-users'||/^\/wallet-users\/\d+\/balances$/.test(path)))return 'balances';
   if(method==='GET' && path==='/login-ips' || method==='PATCH' && /^\/login-ips\/\d+\/review$/.test(path))return 'security';
   if(method==='GET' && ['/transactions','/transaction-history','/trading'].includes(path))return 'transactions';
-  if(method==='GET' && (path==='/referrals'||/^\/referrals\/\d+\/invitees$/.test(path)) || method==='POST' && /^\/referrals\/\d+\/link$/.test(path))return 'referrals';
+  if(method==='GET' && (['/referrals','/referral-policy'].includes(path)||/^\/referrals\/\d+\/invitees$/.test(path)) || method==='POST' && /^\/referrals\/\d+\/link$/.test(path))return 'referrals';
   return null;
 }
 export function validateHelperConfiguration(body) {

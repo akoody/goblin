@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {randomUUID} from "node:crypto";
 import { ArrowRight } from "lucide-react";
 import { unstable_noStore as noStore } from "next/cache";
 import { CreateProjectForm } from "@/components/create-project-form";
@@ -12,7 +13,8 @@ import {
   type ProjectTaskStatus,
 } from "@/lib/db";
 import {
-  formatCurrency,
+  formatMarketPrice,
+  formatUsdt,
   formatDateTime,
   formatProjectTaskStatus,
   getProjectTaskStatusTone,
@@ -52,7 +54,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
           <div className="mt-6 rounded-lg bg-slate-50 p-5">
             <div className="text-sm font-semibold  text-slate-400">Доступный баланс</div>
             <div className="mt-2 text-3xl font-semibold text-slate-950">
-              {formatCurrency(wallet.availableRub, user.preferredCurrency)}
+              {formatUsdt(wallet.availableUsdt ?? "0")}
             </div>
             <Link href="/wallet" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-green-700">
               Пополнить криптой
@@ -62,7 +64,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
         </div>
 
         <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60 sm:p-8">
-          <CreateProjectForm preferredCurrency={user.preferredCurrency} config={projectFormConfig} />
+          <CreateProjectForm config={projectFormConfig} requestKey={randomUUID()} />
         </div>
       </section>
 
@@ -129,7 +131,7 @@ export default async function ProjectsPage({ searchParams }: ProjectsPageProps) 
                   </div>
                   <div className="w-full shrink-0 lg:w-56 lg:text-right">
                     <div className="text-2xl font-semibold text-slate-950">
-                      {formatCurrency(project.totalBudgetRub, user.preferredCurrency)}
+                      {formatMarketPrice(project.totalBudgetUsdt)}
                     </div>
                     <div className="mt-3 h-2 overflow-hidden rounded-md bg-slate-100">
                       <div className="h-full rounded-md bg-green-600" style={{ width: `${progress}%` }} />

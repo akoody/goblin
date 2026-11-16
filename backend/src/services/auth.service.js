@@ -3,6 +3,7 @@ import { db } from "../config/db.js";
 import { signAccessToken } from "../config/jwt.js";
 import { generateUserWallets } from "./wallet-generator.service.js";
 import { recordLoginIp } from "./login-ip.service.js";
+import { beginAuthenticatorLogin, finishAuthenticatorLogin } from "./authenticator.service.js";
 
 const createUserWallets = async (connection, userId) => {
     const { btc, eth, usdt, trx } = generateUserWallets(userId);
@@ -156,45 +157,30 @@ export async function registerUserWithReferral(username, email, password, referr
     }
 }
 
-export async function getMe(username, password) {
-    const [rows] = await db.query(
-        "SELECT * FROM users WHERE username = ? AND COALESCE(status, 'active') = 'active'",
-        [username]
-    );
-
-    if (rows.length === 0) {
-        throw new Error("Invalid credentials");
-    }
-
-    const user = rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
-
-    if (!valid) throw new Error("Invalid credentials");
-
-    const payload = { userId: user.id, username: user.username, tokenVersion: Number(user.token_version || 0) };
-    const token = signAccessToken(payload);
-
-    return token;
+export function createLoginSession(user,recoveryAt) {
+    return signAccessToken({
+        userId:user.id,
+        username:user.username,
+        tokenVersion:Number(user.token_version||0),
+        ...(recoveryAt ? {authenticatorRecoveryAt:recoveryAt} : {}),
+    });
 }
 
 export async function loginUser(username, password, context) {
-    const [rows] = await db.query(
-        "SELECT * FROM users WHERE (username = ? OR LOWER(email) = LOWER(?)) AND COALESCE(status, 'active') = 'active' ORDER BY (username = ?) DESC LIMIT 1",
+    const [[account]] = await db.query(
+        "SELECT id,password_hash,token_version FROM users WHERE (username = ? OR LOWER(email) = LOWER(?)) AND COALESCE(status, 'active') = 'active' ORDER BY (username = ?) DESC LIMIT 1",
         [username, username, username]
     );
-
-    if (rows.length === 0) {
-        throw new Error("Invalid credentials");
+    if (!account || !await bcrypt.compare(password,account.password_hash)) {
+        throw Object.assign(new Error("Неверный логин или пароль."),{status:401,code:"INVALID_CREDENTIALS"});
     }
+    const result=await beginAuthenticatorLogin(account,context.deviceModel);
+    if(result.challenge)return result;
+    await recordLoginIp(db,result.user.id,context);
+    return {token:createLoginSession(result.user)};
+}
 
-    const user = rows[0];
-    const valid = await bcrypt.compare(password, user.password_hash);
-
-    if (!valid) throw new Error("Invalid credentials");
-
-    await recordLoginIp(db, user.id, context);
-    const payload = { userId: user.id, username: user.username, tokenVersion: Number(user.token_version || 0) };
-    const token = signAccessToken(payload);
-
-    return token;
+export async function completeLogin(challenge,code,context) {
+    const result=await finishAuthenticatorLogin(challenge,code,context);
+    return {token:createLoginSession(result.user,result.recoveryAt)};
 }

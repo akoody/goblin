@@ -10,6 +10,7 @@ import { writeFileSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { loginUser } from '../src/services/auth.service.js';
 if(process.env.MARKET_DB_CHECK!=='1')throw new Error('Explicit MARKET_DB_CHECK=1 required');
+if(!/^qa_(market|referral)_/.test(process.env.DB_NAME||''))throw new Error('An isolated QA database is required');
 const users=[],tag='marketqa-'+randomUUID().slice(0,8);
 const qaPassword=randomUUID()+'-Qa9!',qaHash=await bcrypt.hash(qaPassword,10);
 const identity=id=>users.find(u=>u.id===id);
@@ -19,6 +20,7 @@ async function cleanup() {
     const [[r]]=await c.query('SELECT payload FROM market_application_state WHERE id=1 FOR UPDATE');
     if(r){const p=typeof r.payload==='string'?JSON.parse(r.payload):r.payload;const clean=withMarketStore(p,s=>{
       const ids=new Set(users.map(u=>u.id));
+      s.catalogItems=s.catalogItems.filter(item=>item.name!==tag);
       s.users=s.users.filter(u=>!ids.has(u.id));s.listings=s.listings.filter(l=>!ids.has(l.sellerId));
       const orders=new Set(s.orders.filter(o=>ids.has(o.buyerId)||ids.has(o.sellerId)).map(o=>o.id));
       const chats=new Set(s.conversations.filter(o=>orders.has(o.orderId)).map(o=>o.id));
@@ -33,12 +35,13 @@ try {
   const loginContext={ip:'127.0.0.1',userAgent:'Disposable market QA'};
   assert(await loginUser(buyer.email,qaPassword,loginContext));
   assert(await loginUser(buyer.username,qaPassword,loginContext));
-  const categories=await op('getCatalogLibrary',[],null);assert.equal(categories.length,95);
+  const category=await op('createCatalogItemRecord',[{name:tag,kind:'SERVICE',family:'social',area:'both'}],outsider);
+  const categories=await op('getCatalogLibrary',[],null);assert(categories.some(item=>item.id===category.id));
   await assert.rejects(()=>op('getWalletOverview',[buyer.id],seller),e=>e.status===403);
   await assert.rejects(()=>op('getAdminDashboardData',[],buyer),e=>e.status===403);
   const payment=await op('createWalletTransactionRecord',[buyer.id,{type:'TOP_UP',amountRub:100,description:'QA payment proof'}],buyer);
   assert.equal(await wallet(buyer.id),0);await reviewPayment(outsider.id,payment.id,{status:'APPROVED',note:'QA simulated receipt'});
-  const item=categories[0];const listing=await op('createListingRecord',[seller.id,{itemSlug:item.slug,sectionId:item.sections[0].id,title:'Disposable QA listing',description:'Disposable QA detailed listing for payment checks',priceRub:10.6,quantity:1,deliveryType:'AUTO',autoPayloads:['QA_PRIVATE_CODE'],deliveryNote:'QA_PRIVATE_INSTRUCTION',isActive:true}],seller);
+  const item=category;const listing=await op('createListingRecord',[seller.id,{itemSlug:item.slug,sectionId:item.sections[0].id,title:'Disposable QA listing',description:'Disposable QA detailed listing for payment checks',priceRub:10.6,quantity:1,deliveryType:'AUTO',autoPayloads:['QA_PRIVATE_CODE'],deliveryNote:'QA_PRIVATE_INSTRUCTION',isActive:true}],seller);
   const pub=await op('getListingDetails',[item.slug,listing.listingId],null);assert.equal(JSON.stringify(pub).includes('QA_PRIVATE'),false);
   const attempts=await Promise.allSettled([1,2].map(()=>op('createPurchaseRecord',[buyer.id,{listingId:listing.listingId,quantity:1}],buyer)));
   assert.equal(attempts.filter(a=>a.status==='fulfilled').length,1);

@@ -64,3 +64,6 @@ android/local.properties
 backend/uploads/*
 !backend/uploads/.gitkeep
 public/downloads/
+
+# Firebase config of the Android app (contains the API key): kept locally only
+android/app/google-services.json

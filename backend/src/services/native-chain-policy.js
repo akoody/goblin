@@ -29,7 +29,7 @@ export function nativePolicy(input,currency){
   if(!n.isFinite()||n.lt(key==='withdrawal_fee_usd'?0:'0.000000000000000001')||n.gt(usd?10000:1000000)||n.decimalPlaces()>(usd?2:nativeDecimals[currency]))nativeFail('Проверьте лимиты и точность','INVALID_POLICY',400);
   result[key]=n.toFixed(usd?2:nativeDecimals[currency]);
  }
- if(new Decimal(result.minimum_withdrawal_usd).lt(5))nativeFail('Минимум вывода — от 5 USDT','INVALID_POLICY',400);
+ if(new Decimal(result.minimum_withdrawal_usd).lt(5))nativeFail('Минимум вывода - от 5 USDT','INVALID_POLICY',400);
  return result;
 }
 export function proveCustody(chain,liability,earned){
@@ -44,7 +44,7 @@ export function validateNativePlan(plan){
  const {currency,sources,outputs}=plan;
  if(!['BTC','ETH'].includes(currency)||!['withdrawal','collection'].includes(plan.kind)||!sources?.length||!outputs?.length||new Set(sources.map(s=>s.address.toLowerCase())).size!==sources.length)nativeFail('Некорректный план','INVALID_PLAN');
  const fee=BigInt(plan.cost.fee);if(fee<=0n)nativeFail('Нулевая комиссия сети','INVALID_PLAN');
- for(const s of sources)proveCustody(BigInt(s.chain.balance),atomic(s.balance,currency),BigInt(s.earned));
+ for(const s of sources){if(atomic(s.liability??s.balance,currency)<atomic(s.balance,currency))nativeFail('Неверное покрытие обязательств','INVALID_PLAN');proveCustody(BigInt(s.chain.balance),atomic(s.liability??s.balance,currency),BigInt(s.earned));}
  if(currency==='ETH'&&(sources.length!==1||outputs.length!==1||fee!==BigInt(plan.cost.gasPrice)*21000n||!Number.isSafeInteger(sources[0].chain.nonce)))nativeFail('Неверный план Ethereum','INVALID_PLAN');
  let expectedChanges;
  if(plan.kind==='collection'){

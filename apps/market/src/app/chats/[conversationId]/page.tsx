@@ -6,7 +6,7 @@ import { settleMarketOrderAction } from '@/app/actions';
 import { requireMarketplaceUser } from "@/lib/auth";
 import { getConversationDetails, getProjectPlatformLabel, getProjectServiceLabel, listUserConversations } from "@/lib/db";
 import {
-  formatCurrency,
+  formatMarketPrice,
   formatDateTime,
   formatRelativeTime,
   getInitials,
@@ -87,7 +87,7 @@ export default async function ConversationPage({ params }: ConversationPageProps
               </div>
             </div>
             <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm text-slate-500">
-              {formatCurrency(conversation.order.amountRub, user.preferredCurrency)}
+              {formatMarketPrice(conversation.order.amountUsdt)}
             </div>
           </div>
           {conversation.project ? (

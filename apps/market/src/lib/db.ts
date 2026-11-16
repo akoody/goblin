@@ -42,6 +42,7 @@ export async function getSupportOverview(...args:Parameters<typeof Contract.getS
 export async function updateOrderStatusAsAdmin(...args:Parameters<typeof Contract.updateOrderStatusAsAdmin>):Promise<ReturnType<typeof Contract.updateOrderStatusAsAdmin>> {return marketRpc('updateOrderStatusAsAdmin',args);}
 export async function createCatalogItemRecord(...args:Parameters<typeof Contract.createCatalogItemRecord>):Promise<ReturnType<typeof Contract.createCatalogItemRecord>> {return marketRpc('createCatalogItemRecord',args);}
 export async function createCatalogSectionRecord(...args:Parameters<typeof Contract.createCatalogSectionRecord>):Promise<ReturnType<typeof Contract.createCatalogSectionRecord>> {return marketRpc('createCatalogSectionRecord',args);}
+export async function updateCatalogAvailabilityRecord(...args:Parameters<typeof Contract.updateCatalogAvailabilityRecord>):Promise<ReturnType<typeof Contract.updateCatalogAvailabilityRecord>> {return marketRpc('updateCatalogAvailabilityRecord',args);}
 export async function getAdminDashboardData(...args:Parameters<typeof Contract.getAdminDashboardData>):Promise<ReturnType<typeof Contract.getAdminDashboardData>> {return marketRpc('getAdminDashboardData',args);}
 export async function getCounts(...args:Parameters<typeof Contract.getCounts>):Promise<ReturnType<typeof Contract.getCounts>> {return marketRpc('getCounts',args);}
 export async function listTopSellers(...args:Parameters<typeof Contract.listTopSellers>):Promise<ReturnType<typeof Contract.listTopSellers>> {return marketRpc('listTopSellers',args);}

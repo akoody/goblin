@@ -1,4 +1,5 @@
 import express from "express";
+import {notifyDealMessage} from '../services/push.service.js';
 import {chatProfile} from '../services/chat-profile.service.js';
 import { hasStaffPermission } from '../services/staff-access.service.js';
 import { db } from "../config/db.js";
@@ -100,6 +101,7 @@ router.post("/", async (req, res) => {
     // Optionally emit to sockets if we want to mix REST send with socket receive
     // (requires importing io, which is complex here, so we skip or rely on sockets for real-time)
 
+    notifyDealMessage('p2p',dealId,userId);
     res.status(201).json(msg);
   } catch (err) {
     console.error("POST /message error:", err);

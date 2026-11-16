@@ -1,4 +1,5 @@
 import test from "node:test";
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from "node:assert/strict";
 import { db } from "../src/config/db.js";
 import { applyP2pCommission, calculateP2pSettlement, updateP2pFeePolicy } from "../src/services/p2p-fee.service.js";
@@ -21,7 +22,7 @@ test("P2P commission is calculated precisely from gross USDT", () => {
 
 test("successful P2P settlement records the fee and credits the admin treasury once in the transaction", async () => {
   const statements = [];
-  const connection = { execute: async (sql, values) => { statements.push({ sql, values }); return [{}]; } };
+  const connection = { execute: async (sql, values) => { const referral=noReferrer(sql);if(referral)return referral; statements.push({ sql, values }); return [{}]; } };
   const settlement = await applyP2pCommission(connection, {
     dealId: 42,
     sellerId: 7,

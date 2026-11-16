@@ -1,5 +1,8 @@
 import {randomUUID} from 'node:crypto';
+import {afterCommit} from './post-commit.js';
+import {notifyUsers} from './push.service.js';
 import Decimal from 'decimal.js';
+import {accrueReferral,referralCustody,referralCustodyBalances} from './referral-accrual.service.js';
 import {Wallet} from 'ethers';
 import {db} from '../config/db.js';
 import {transact} from './commerce.service.js';
@@ -54,9 +57,11 @@ async function inspectWallet(walletId,currency){
  const [[pending]]=await db.execute('SELECT id FROM blockchain_deposits WHERE wallet_id=? AND credited_at IS NULL LIMIT 1',[w.id]);if(pending)fail('Есть депозит на AML-проверке','AML_PENDING');
  const [[internal]]=await db.execute("SELECT id FROM transactions WHERE currency=? AND type='internal' AND (wallet_id=? OR from_address=? OR to_address=?) LIMIT 1",[currency,w.id,w.address,w.address]);
  if(internal)fail('История внутренних переводов требует адресной сверки','PROVENANCE_REVIEW');
- const chain=await sourceChain(currency,w.address),earned=await ownFees(w);
- proveCustody(BigInt(chain.balance),atomic(w.balance,currency),earned);
- return {walletId:w.id,userId:w.user_id,address:w.address,balance:w.balance,earned:earned.toString(),chain};
+ const chain=await sourceChain(currency,w.address),grossFees=await ownFees(w);
+ const covered=referralCustodyBalances(w.balance,nativeAmount(grossFees,currency),await referralCustody(db,w.user_id,currency));
+ const earned=atomic(covered.earned,currency);
+ proveCustody(BigInt(chain.balance),atomic(covered.liability,currency),earned);
+ return {walletId:w.id,userId:w.user_id,address:w.address,balance:covered.local,bookBalance:w.balance,liability:covered.liability,earned:earned.toString(),chain};
 }
 async function policyFor(currency){
  if(!nativeConfigured()||!['BTC','ETH'].includes(currency))fail('Процессинг BTC/ETH выключен','NOT_CONFIGURED',503);
@@ -84,7 +89,7 @@ export async function quoteNativeWithdrawal(user,currency,address,value,key){
  const [[vault]]=await db.execute('SELECT network FROM treasury_collection_wallets WHERE LOWER(address)=LOWER(?) LIMIT 1',[to]);
  if(managed||vault)fail('Для адресов Goblin используйте внутренний перевод','MANAGED_DESTINATION');
  const amount=atomic(value,currency),quote=await depositQuote(currency);
- if(new Decimal(value).mul(quote.price).lt(policy.minimum_withdrawal_usd))fail(`Минимальная сумма вывода — ${policy.minimum_withdrawal_usd} USDT`,'BELOW_MINIMUM');
+ if(new Decimal(value).mul(quote.price).lt(policy.minimum_withdrawal_usd))fail(`Минимальная сумма вывода - ${policy.minimum_withdrawal_usd} USDT`,'BELOW_MINIMUM');
  const serviceFee=atomic(new Decimal(policy.withdrawal_fee_usd).div(quote.price).toDecimalPlaces(currency==='BTC'?8:18,Decimal.ROUND_UP).toFixed(),currency);
  const cost=await nativeNetworkCost(currency,[source],[{address:to},{address:source.address}]);
  if(BigInt(cost.fee)>atomic(policy.maximum_network_fee,currency))fail('Стоимость сети выше лимита, повторите позже','NETWORK_FEE_LIMIT');
@@ -115,7 +120,8 @@ export async function previewNativeCollection(currency,actor,key=randomUUID()){
  outputs[0].value=(gross-fee).toString();
  const [[treasury]]=await db.execute('SELECT balance FROM admin_treasury WHERE currency=?',[currency]);
  const [[collected]]=await db.execute("SELECT COALESCE(SUM(received),0) amount FROM native_chain_jobs WHERE currency=? AND kind='collection' AND status='confirmed'",[currency]);
- if(atomic(treasury?.balance||'0',currency)-atomic(collected.amount,currency)<gross)fail('Нужна сверка доступной комиссии казны','TREASURY_MISMATCH');
+ const [[paid]]=await db.execute("SELECT COALESCE(SUM(CASE WHEN status IN ('confirmed','prepared','submitted','review') THEN gross_amount WHEN status='failed' THEN fee_charged ELSE 0 END),0) amount FROM treasury_payouts WHERE currency=?",[currency]);
+ if(atomic(treasury?.balance||'0',currency)+atomic(paid.amount,currency)-atomic(collected.amount,currency)<gross)fail('Нужна сверка доступной комиссии казны','TREASURY_MISMATCH');
  return storePlan({currency,kind:'collection',sources,outputs,cost,gross:gross.toString(),skipped,policy},actor,null,key);
 }
 export async function executeNativePlan(id,user=null,actor=null){return exclusive(async()=>{
@@ -133,7 +139,7 @@ export async function executeNativePlan(id,user=null,actor=null){return exclusiv
   const unavailable=other.reduce((s,j)=>s+(j.status==='confirmed'?atomic(j.received||'0',job.currency):BigInt(parse(j.plan_json).gross)),0n);
   if(atomic(treasury?.balance||'0',job.currency)-unavailable<BigInt(plan.gross))fail('Комиссия казны уже занята другим сбором','TREASURY_BUSY');
  }
- for(const s of plan.sources){const now=await inspectWallet(s.walletId,job.currency);if(now.balance!==s.balance||now.earned!==s.earned||!sameNativeChain(now.chain,s.chain))fail('Баланс сети изменился. Пересчитайте.','SOURCE_CHANGED');}
+ for(const s of plan.sources){const now=await inspectWallet(s.walletId,job.currency);if(now.balance!==s.balance||now.bookBalance!==(s.bookBalance??s.balance)||now.liability!==(s.liability??s.balance)||now.earned!==s.earned||!sameNativeChain(now.chain,s.chain))fail('Баланс сети изменился. Пересчитайте.','SOURCE_CHANGED');}
  const currentCost=await nativeNetworkCost(job.currency,plan.sources,plan.outputs);
  if(BigInt(currentCost.fee)>BigInt(plan.cost.fee))fail('Комиссия сети выросла, пересчитайте','FEE_CHANGED');
  await transact(async c=>{
@@ -141,7 +147,7 @@ export async function executeNativePlan(id,user=null,actor=null){return exclusiv
   const keys=[];
   for(const s of plan.sources){
    const [[w]]=await c.execute('SELECT w.*,u.status user_status,u.withdrawals_enabled FROM wallets w JOIN users u ON u.id=w.user_id WHERE w.id=? FOR UPDATE',[s.walletId]);
-   if(w.status!=='active'||w.user_status!=='active'||w.collection_lock_id||new Decimal(w.locked_balance||0).gt(0)||!new Decimal(w.balance).eq(s.balance)||w.address!==s.address)fail('Состояние кошелька изменилось');
+   if(w.status!=='active'||w.user_status!=='active'||w.collection_lock_id||new Decimal(w.locked_balance||0).gt(0)||!new Decimal(w.balance).eq(s.bookBalance??s.balance)||w.address!==s.address)fail('Состояние кошелька изменилось');
    if(job.kind==='withdrawal'&&!w.withdrawals_enabled)fail('Вывод отключён для аккаунта');
    if(job.kind==='withdrawal')await c.execute('UPDATE wallets SET locked_balance=locked_balance+? WHERE id=?',[nativeAmount(plan.total,job.currency),w.id]);
    await c.execute('UPDATE wallets SET collection_lock_id=? WHERE id=?',[id,w.id]);
@@ -167,7 +173,7 @@ export async function settleNativeJob(job,receipt){
    if(job.kind==='withdrawal'){
     const service=receipt.success?BigInt(plan.serviceFee):0n,spent=(receipt.success?BigInt(plan.amount):0n)+service+receipt.fee;
     const [r]=await c.execute('UPDATE wallets SET balance=balance-?,locked_balance=locked_balance-? WHERE id=? AND balance>=? AND locked_balance>=?',[nativeAmount(spent,currency),nativeAmount(plan.total,currency),s.walletId,nativeAmount(spent,currency),nativeAmount(plan.total,currency)]);if(r.affectedRows!==1)fail('Резерв вывода не сходится');
-    if(service>0n){await c.execute("INSERT INTO native_fee_ledger(job_id,wallet_id,currency,kind,amount) VALUES(?,?,?,'withdrawal',?)",[job.id,s.walletId,currency,nativeAmount(service,currency)]);await c.execute('INSERT INTO admin_treasury(currency,balance) VALUES(?,?) ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)',[currency,nativeAmount(service,currency)]);}
+    if(service>0n){await c.execute("INSERT INTO native_fee_ledger(job_id,wallet_id,currency,kind,amount) VALUES(?,?,?,'withdrawal',?)",[job.id,s.walletId,currency,nativeAmount(service,currency)]);await c.execute('INSERT INTO admin_treasury(currency,balance) VALUES(?,?) ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)',[currency,nativeAmount(service,currency)]);await accrueReferral(c,{kind:'WITHDRAWAL',sourceId:job.id,payerId:job.user_id,sourceUserId:s.userId,currency,fee:nativeAmount(service,currency)});}
     if(receipt.success)await c.execute("INSERT INTO transactions(wallet_id,tx_hash,from_address,to_address,amount,currency,type) VALUES(?,?,?,?,?,?,'withdrawal')",[s.walletId,job.tx_hash,s.address,plan.outputs[0].address,nativeAmount(plan.amount,currency),currency]);
    }else{
     const gross=BigInt(s.gross),fee=i===plan.sources.length-1?expense:receipt.fee*gross/BigInt(plan.gross);expense-=fee;
@@ -177,6 +183,7 @@ export async function settleNativeJob(job,receipt){
   }
   if(job.kind==='collection'&&receipt.fee>0n){const fee=nativeAmount(receipt.fee,currency);const [r]=await c.execute('UPDATE admin_treasury SET balance=balance-? WHERE currency=? AND balance>=?',[fee,currency,fee]);if(r.affectedRows!==1)fail('Казна не покрывает расходы сети');}
   await c.execute('UPDATE native_chain_jobs SET status=?,network_fee=?,received=?,signed_hex=NULL,error_code=NULL WHERE id=?',[receipt.success?'confirmed':'failed',nativeAmount(receipt.fee,currency),receipt.success?nativeAmount(plan.outputs[0].value,currency):'0',job.id]);
+  if(job.kind==='withdrawal')afterCommit(c,()=>notifyUsers(receipt.success?'withdrawal_confirmed':'withdrawal_failed',[job.user_id],{key:`native:${job.id}:${receipt.success}`}));
  });
 }
 export async function recheckNativeJob(id,actor){return exclusive(async()=>{
@@ -205,7 +212,8 @@ export async function runNativeThresholds(){
   const [[pending]]=await db.execute(`SELECT id FROM native_chain_jobs WHERE currency=? AND status IN ${active} LIMIT 1`,[p.currency]);if(pending)continue;
   const [[treasury]]=await db.execute('SELECT balance FROM admin_treasury WHERE currency=?',[p.currency]);
   const [[collected]]=await db.execute("SELECT COALESCE(SUM(received),0) amount FROM native_chain_jobs WHERE currency=? AND kind='collection' AND status='confirmed'",[p.currency]);
-  if(new Decimal(treasury?.balance||0).minus(collected.amount).lt(p.collection_threshold))continue;
+  const [[paid]]=await db.execute("SELECT COALESCE(SUM(CASE WHEN status IN ('confirmed','prepared','submitted','review') THEN gross_amount WHEN status='failed' THEN fee_charged ELSE 0 END),0) amount FROM treasury_payouts WHERE currency=?",[p.currency]);
+  if(new Decimal(treasury?.balance||0).plus(paid.amount).minus(collected.amount).lt(p.collection_threshold))continue;
   try{const plan=await previewNativeCollection(p.currency,null);if(!plan.empty)await executeNativePlan(plan.id);}catch{/* Failed readiness is not authority to move funds. */}
  }
 }

@@ -1,4 +1,5 @@
 import {randomUUID} from 'node:crypto';
+import {accrueReferral} from './referral-accrual.service.js';
 import {createRequire} from 'node:module';
 import {Keypair,PublicKey,TransactionMessage,VersionedTransaction,ComputeBudgetProgram} from '@solana/web3.js';
 import bs58 from 'bs58';
@@ -102,6 +103,7 @@ export async function settleLaunch(job,cost,output,status){
    await c.execute('INSERT INTO solana_holdings(user_id,mint,decimals,amount_atomic) VALUES(?,?,6,?) ON DUPLICATE KEY UPDATE amount_atomic=amount_atomic+VALUES(amount_atomic)',[job.user_id,job.mint,output.toString()]);
    await c.execute('INSERT INTO pump_fee_ledger(launch_id,user_id,amount_sol) VALUES(?,?,?)',[job.id,job.user_id,solUnits(fee)]);
    await c.execute("INSERT INTO admin_treasury(currency,balance) VALUES('SOL',?) ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)",[solUnits(fee)]);
+   await accrueReferral(c,{kind:'PUMP',sourceId:job.id,payerId:job.user_id,currency:'SOL',fee:solUnits(fee)});
   }
   await c.execute('UPDATE pump_launches SET status=?,cost_atomic=?,output_atomic=?,signed_transaction=NULL,error_code=NULL WHERE id=?',[status,cost.toString(),output.toString(),job.id]);
  });

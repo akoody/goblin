@@ -1,6 +1,8 @@
 import api from './api';
+import {detachPush} from './push';
 export async function signOut() {
   if (!window.confirm('Выйти из аккаунта?')) return;
+  try {await detachPush();} catch(error) {window.alert(error.message);return;}
   try { await api.post('/api/market-app/logout'); }
   finally { localStorage.removeItem('token'); window.location.assign('/login'); }
 }

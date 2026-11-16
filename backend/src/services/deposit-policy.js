@@ -16,7 +16,7 @@ export function depositSettlement({amount,currency,feeUsd,quote,minUsd='5'}) {
 export function validateManualReview(body) {
   if(!['APPROVE','BLOCK'].includes(body?.action))throw Object.assign(new Error('Выберите решение по депозиту'),{status:400});
   const bounded=(v,min,max)=>typeof v==='string'&&v.trim().length>=min&&v.length<=max;
-  if(!bounded(body.note,10,2000))throw Object.assign(new Error('Укажите обоснование решения (10–2000 символов)'),{status:400});
+  if(!bounded(body.note,10,2000))throw Object.assign(new Error('Укажите обоснование решения (10-2000 символов)'),{status:400});
   if(body.action==='APPROVE'&&(!bounded(body.provider,2,120)||!bounded(body.reference,8,1000)||!['LOW','MEDIUM'].includes(body.riskLevel)))throw Object.assign(new Error('Для зачисления нужен проверенный внешний AML-отчёт, его номер/ссылка, провайдер и допустимый уровень риска'),{status:400});
   return body;
 }

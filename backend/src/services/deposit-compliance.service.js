@@ -1,4 +1,7 @@
 import Decimal from 'decimal.js';
+import {afterCommit} from './post-commit.js';
+import {notifyUsers} from './push.service.js';
+import {accrueReferral} from './referral-accrual.service.js';
 import {proveNativeDepositFunding} from './native-deposit-proof.js';
 import { db } from '../config/db.js';
 import { transact } from './commerce.service.js';
@@ -64,6 +67,9 @@ export async function depositComplianceOverview() {
       UNION ALL
       SELECT currency,SUM(amount) AS amount,COUNT(*) AS item_count
         FROM native_fee_ledger WHERE kind='withdrawal' GROUP BY currency
+      UNION ALL
+      SELECT 'SOL' AS currency,SUM(amount_sol) AS amount,COUNT(*) AS item_count
+        FROM pump_fee_ledger WHERE amount_sol>0
     ) collected GROUP BY currency ORDER BY currency`);
   const [deposits]=await db.query(`SELECT d.id,d.currency,d.network,d.tx_hash,d.event_index,d.from_address,d.to_address,d.amount,d.block_timestamp,d.credited_at,
     r.*,a.status AS aml_status,a.check_id AS aml_check_id,a.error_code AS aml_error,w.user_id,u.username FROM deposit_reviews r JOIN blockchain_deposits d ON d.id=r.deposit_id JOIN wallets w ON w.id=d.wallet_id JOIN users u ON u.id=w.user_id LEFT JOIN deposit_aml_checks a ON a.deposit_id=d.id
@@ -71,7 +77,7 @@ export async function depositComplianceOverview() {
   const [ledger]=await db.query(`SELECT l.*,u.username FROM admin_treasury_ledger l LEFT JOIN users u ON u.id=l.user_id ORDER BY l.id DESC LIMIT 200`);
   const [[counts]]=await db.query("SELECT COUNT(*) AS pending FROM deposit_reviews WHERE status IN ('PENDING_AML','PENDING_CHAIN')");
   return {policy:{feeUsd:policy.fee_usd,minUsd:policy.min_usd,amlMode:safioConfigured()?'SAFIO_AUTO_LOW_RISK':'AWAITING_PROVIDER',updatedAt:policy.updated_at},balances,
-    income:{deposits,guarantor:{currency:'USDT',amount:String(guarantorIncome.amount),count:Number(guarantorIncome.count)},
+    income:{deposits:depositIncome,guarantor:{currency:'USDT',amount:String(guarantorIncome.amount),count:Number(guarantorIncome.count)},
       p2p:{currency:'USDT',amount:String(p2pIncome.amount),count:Number(p2pIncome.count),enabled:true},total:totalIncome,
       referralPayouts:referralPayouts.map(item=>({...item,count:Number(item.count)})),
       referrals:{registeredCount:Number(referralCount.count),deposits:referralDeposits.map(item=>({...item,count:Number(item.count)}))}},
@@ -134,6 +140,7 @@ async function settleDepositReview(actor,id,body,automatic,withoutAml=false) {
       const provider=typeof body.provider==='string'?body.provider.trim().slice(0,120)||null:null;
       const reference=typeof body.reference==='string'?body.reference.trim().slice(0,1000)||null:null;
       await c.execute("UPDATE deposit_reviews SET status='BLOCKED',reviewer_id=?,review_note=?,risk_level=?,report_provider=?,report_reference=?,reviewed_at=NOW() WHERE deposit_id=?",[actor,body.note.trim(),risk,provider,reference,id]);
+      afterCommit(c,()=>notifyUsers('deposit_blocked',[wallet.user_id],{key:`deposit:${id}:blocked`}));
       return {status:'BLOCKED'};
     }
     if(wallet.status!=='active'||wallet.user_status!=='active'||Number(wallet.deposits_enabled)!==1)fail('Зачисления для аккаунта отключены',403);
@@ -144,8 +151,10 @@ async function settleDepositReview(actor,id,body,automatic,withoutAml=false) {
     await c.execute(`INSERT INTO transactions (wallet_id,tx_hash,from_address,to_address,amount,currency,type) VALUES (?,?,?,?,?,?,'deposit')`,[wallet.id,deposit.tx_hash,deposit.from_address,deposit.to_address,settlement.net,deposit.currency]);
     await c.execute('INSERT INTO admin_treasury (currency,balance) VALUES (?,?) ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)',[deposit.currency,settlement.fee]);
     await c.execute('INSERT INTO admin_treasury_ledger (deposit_id,user_id,currency,amount,fee_usd) VALUES (?,?,?,?,?)',[id,wallet.user_id,deposit.currency,settlement.fee,deposit.fee_usd]);
+    await accrueReferral(c,{kind:'DEPOSIT',sourceId:id,payerId:wallet.user_id,currency:deposit.currency,fee:settlement.fee});
     await c.execute(`UPDATE deposit_reviews SET status='CREDITED',fee_amount=?,net_amount=?,quote_price=?,quote_source=?,quote_at=?,report_provider=?,report_reference=?,risk_level=?,review_note=?,reviewer_id=?,reviewed_at=NOW(),chain_error=NULL,chain_retry_at=NULL WHERE deposit_id=?`,[settlement.fee,settlement.net,quote.price,quote.source,quote.at,body.provider.trim(),body.reference.trim(),body.riskLevel,body.note.trim(),actor,id]);
     await c.execute('UPDATE blockchain_deposits SET credited_at=NOW() WHERE id=?',[id]);
+    afterCommit(c,()=>notifyUsers('deposit_credited',[wallet.user_id],{key:`deposit:${id}:credited`}));
     return {status:'CREDITED',fee:settlement.fee,net:settlement.net,currency:deposit.currency};
   });
 }

@@ -6,7 +6,7 @@ import { ProjectTaskControls } from "@/components/project-task-controls";
 import { requireMarketplaceUser } from "@/lib/auth";
 import { getProjectPlatformLabel, getProjectServiceLabel, getProjectTaskById } from "@/lib/db";
 import {
-  formatCurrency,
+  formatMarketPrice,
   formatDateTime,
   formatProjectTaskStatus,
   getProjectTaskStatusTone,
@@ -66,10 +66,10 @@ export default async function ProjectPage({ params }: ProjectPageProps) {
           <div className="w-full shrink-0 rounded-lg bg-slate-50 p-5 lg:w-80">
             <div className="text-sm font-semibold  text-slate-400">Бюджет</div>
             <div className="mt-2 text-3xl font-semibold text-slate-950">
-              {formatCurrency(project.totalBudgetRub, user.preferredCurrency)}
+              {formatMarketPrice(project.totalBudgetUsdt)}
             </div>
             <div className="mt-2 text-sm text-slate-500">
-              {formatCurrency(project.rewardPerTargetRub, user.preferredCurrency)} за цель
+              {formatMarketPrice(project.rewardPerTargetUsdt)} за цель
             </div>
             <div className="mt-5 h-2 overflow-hidden rounded-md bg-white">
               <div className="h-full rounded-md bg-green-600" style={{ width: `${progress}%` }} />

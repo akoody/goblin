@@ -303,7 +303,7 @@ export const NftGifts = () => {
           <section className={styles.nft_analytics} role="dialog" aria-modal="true" aria-label={`Аналитика ${selectedGift.name}`} onMouseDown={(event) => event.stopPropagation()}>
             <header>
               <div className={styles.nft_analyticsTitle}>
-                <GiftVisual item={{ ...selectedGift, serialNumber: selectedGift.serialNumber || "—" }} compact />
+                <GiftVisual item={{ ...selectedGift, serialNumber: selectedGift.serialNumber || "-" }} compact />
                 <div><span>Статистика коллекции</span><h2>{selectedGift.name}</h2><p>{selectedGift.collectionName}</p></div>
               </div>
               <button type="button" aria-label="Закрыть аналитику" onClick={() => setSelectedGift(null)}><FiX /></button>
@@ -331,9 +331,9 @@ export const NftGifts = () => {
                     </div>
                   )}
                   <div className={styles.nft_chartStats}>
-                    <span>Мин. <b>{giftHistory.summary.floorPrice ? `${formatUsdt(giftHistory.summary.floorPrice)} USDT` : "—"}</b></span>
-                    <span>Средняя <b>{giftHistory.summary.averagePrice ? `${formatUsdt(giftHistory.summary.averagePrice)} USDT` : "—"}</b></span>
-                    <span>Макс. <b>{giftHistory.summary.ceilingPrice ? `${formatUsdt(giftHistory.summary.ceilingPrice)} USDT` : "—"}</b></span>
+                    <span>Мин. <b>{giftHistory.summary.floorPrice ? `${formatUsdt(giftHistory.summary.floorPrice)} USDT` : "-"}</b></span>
+                    <span>Средняя <b>{giftHistory.summary.averagePrice ? `${formatUsdt(giftHistory.summary.averagePrice)} USDT` : "-"}</b></span>
+                    <span>Макс. <b>{giftHistory.summary.ceilingPrice ? `${formatUsdt(giftHistory.summary.ceilingPrice)} USDT` : "-"}</b></span>
                   </div>
                 </section>
 

@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from 'node:assert/strict';
 import {consumeFeeBonus,bonusDiscount,discountedFeePercent} from '../src/services/fee-bonus.service.js';
 import {applyP2pCommission} from '../src/services/p2p-fee.service.js';
@@ -15,6 +16,7 @@ test('A coupon is consumed once for its beneficiary and deal kind using a row lo
 test('P2P credits reduced fee to treasury and consumes only one coupon',async()=>{
  let treasury,consumed=0;
  const c={execute:async(sql,args)=>{
+  const referral=noReferrer(sql);if(referral)return referral;
   if(sql.startsWith('SELECT'))return [[{id:7,discount_percent:'50.00'}]];
   if(sql.startsWith('UPDATE fee_bonuses')){consumed++;return [{affectedRows:1}];}
   if(sql.includes('INSERT INTO admin_treasury'))treasury=args[0];

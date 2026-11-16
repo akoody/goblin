@@ -4,6 +4,7 @@ import { marketOperation } from '../services/market-app.service.js';
 import { createRateLimit } from '../middleware/rate-limit.js';
 import { getPlatformFeatures, assertPlatformFeature } from '../services/platform-features.service.js';
 import { isCommerceAdmin } from '../services/commerce.service.js';
+import {catalogVisitorHash,recordCatalogVisit} from '../services/market-popularity.service.js';
 const router=Router();
 router.get('/availability',async(req,res)=>{
   try {
@@ -29,7 +30,16 @@ router.post('/rpc',createRateLimit({windowMs:60000,max:600,message:'Слишко
   } catch(error) {
     if(!error.status)console.error('Market RPC:',req.body?.operation,error.message);
     const domainError=/^[A-Z_]+$/.test(error.message);
-    res.status(error.status||(domainError?400:503)).json({code:error.code==='FEATURE_MAINTENANCE'?error.code:domainError?error.message:'MARKET_UNAVAILABLE'});
+    res.status(error.status||(domainError?400:503)).json({code:error.status&&error.code?error.code:domainError?error.message:'MARKET_UNAVAILABLE'});
   }
+});
+router.post('/catalog-visits',createRateLimit({windowMs:60000,max:90,message:'Слишком много переходов.'}),async(req,res)=>{
+  try {
+    await assertPlatformFeature('market');
+    const identity=await marketIdentity(cookieToken(req));
+    const visitorHash=catalogVisitorHash({userId:identity?.id,ip:req.ip,userAgent:req.get('user-agent')});
+    const result=await recordCatalogVisit({slug:req.body?.slug,area:req.body?.area,visitorHash});
+    res.set('Cache-Control','no-store').json(result);
+  }catch(error){res.status(error.status||503).json({code:error.status?error.message:'VISIT_UNAVAILABLE'});}
 });
 export default router;

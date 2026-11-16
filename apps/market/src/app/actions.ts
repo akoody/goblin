@@ -3,7 +3,7 @@
 import { revalidatePath } from "@/lib/market-navigation";
 import { redirect } from "@/lib/market-navigation";
 import { z } from "zod";
-import { ENV_ADMIN_ID, getAuthenticatedHomePath, isAdminEmail, verifyEnvAdminPassword } from "@/lib/admin";
+import { getAuthenticatedHomePath, isAdminEmail, verifyEnvAdminPassword } from "@/lib/admin";
 import {
   clearSession,
   createSession,
@@ -15,6 +15,7 @@ import {
 import {
   createCatalogItemRecord,
   createCatalogSectionRecord,
+  updateCatalogAvailabilityRecord,
   createListingRecord,
   createMessageRecord,
   acceptProjectRecord,
@@ -23,7 +24,6 @@ import {
   createPurchaseRecord,
   createSupportTicketRecord,
   createUser,
-  createWalletTransactionRecord,
   findUserByEmail,
   getProjectServiceSetting,
   isProjectServiceAvailable,
@@ -32,15 +32,14 @@ import {
   updateProjectProgressRecord,
   updateProjectServiceSettingRecord,
   updateOrderStatusAsAdmin,
-  updateUserCurrency,
 } from "@/lib/db";
 import { getCatalogSectionPath } from "@/lib/routes";
-import { convertCurrencyToRub } from "@/lib/utils";
 import { marketRpc } from '@/lib/market-rpc';
 
 export type FormState = {
   error?: string;
   success?: string;
+  challenge?: string;
 };
 
 const initialState: FormState = {};
@@ -53,13 +52,16 @@ export async function settleMarketOrderAction(formData:FormData) {
 }
 
 const loginSchema = z.object({
-  email: z.string().trim().email("Укажи корректный email."),
+  email: z.string().trim().min(1, "Введите логин или email.").max(254),
   password: z.string().min(1, "Введите пароль."),
 });
 
 const registerSchema = loginSchema.extend({
+  email: z.string().trim().email("Укажи корректный email.").max(254),
   name: z.string().trim().min(2, "Имя должно быть не короче 2 символов."),
-  password: z.string().min(8, "Пароль должен быть не короче 8 символов."),
+  password: z.string().min(10, "Пароль должен содержать минимум 10 символов.")
+    .regex(/[A-Za-zА-Яа-я]/, "Добавьте буквы в пароль.").regex(/[0-9]/, "Добавьте цифры в пароль.")
+    .refine(value=>Buffer.byteLength(value,'utf8')<=72,"Пароль слишком длинный: максимум 72 байта."),
 });
 
 const messageSchema = z.object({
@@ -67,27 +69,13 @@ const messageSchema = z.object({
   text: z.string().trim().min(1, "Сообщение не может быть пустым.").max(2000, "Сообщение слишком длинное."),
 });
 
-const currencySchema = z.object({
-  currency: z.enum(["RUB", "USD", "EUR"]),
-  returnTo: z.string().trim().min(1).default("/settings"),
-});
-
-const walletSchema = z.object({
-  amount: z.coerce.number().positive("Сумма должна быть больше нуля."),
-  currency: z.enum(["RUB", "USD", "EUR"]),
-  details: z.string().trim().max(800).optional(),
-});
-
-const cryptoWalletSchema = walletSchema.extend({
-  asset: z.enum(["USDT", "BTC", "ETH", "TON"]),
-  network: z.string().trim().min(2, "Укажи сеть перевода."),
-  txHash: z.string().trim().min(8, "Укажи hash транзакции."),
-});
-
 const supportSchema = z.object({
   subject: z.string().trim().min(6, "Тема должна быть не короче 6 символов."),
   text: z.string().trim().min(20, "Опиши запрос подробнее."),
 });
+
+const usdtInput = z.string().trim().regex(/^(?:0|[1-9]\d{0,7})(?:\.\d{1,6})?$/, "Укажите сумму USDT, до 6 знаков после запятой.")
+  .refine(value => Number(value)>0 && Number(value)<=10_000_000);
 
 const listingSchema = z.object({
   itemSlug: z.string().trim().min(1),
@@ -95,8 +83,7 @@ const listingSchema = z.object({
   title: z.string().trim().min(10, "Краткое описание должно быть не короче 10 символов."),
   description: z.string().trim().min(30, "Подробное описание должно быть не короче 30 символов."),
   deliveryNote: z.string().trim().optional(),
-  price: z.coerce.number().positive("Цена должна быть больше нуля."),
-  currency: z.enum(["RUB", "USD", "EUR"]),
+  price: usdtInput,
   quantity: z.coerce.number().int().positive("Наличие должно быть больше нуля.").optional(),
   deliveryType: z.enum(["AUTO", "MANUAL"]),
   isActive: z.enum(["true"]).optional(),
@@ -106,6 +93,7 @@ const purchaseSchema = z.object({
   listingId: z.string().trim().min(1),
   quantity: z.coerce.number().int().positive("Количество должно быть больше нуля.").default(1),
   message: z.string().trim().max(1000, "Сообщение слишком длинное.").optional(),
+  requestKey: z.uuid().optional(),
 });
 
 const projectSchema = z.object({
@@ -116,9 +104,33 @@ const projectSchema = z.object({
   messageText: z.string().trim().max(3000, "Текст сообщения слишком длинный.").optional(),
   targetSource: z.string().trim().min(3, "Укажи канал, чат или источник базы.").max(200, "Источник слишком длинный."),
   targets: z.string().trim().min(2, "Добавь хотя бы одну цель для отслеживания."),
-  rewardPerTarget: z.coerce.number().positive("Оплата за цель должна быть больше нуля."),
-  currency: z.enum(["RUB", "USD", "EUR"]),
+  rewardPerTarget: usdtInput,
+  requestKey: z.uuid().optional(),
 });
+
+export async function transferMarketUsdtAction(_: FormState, formData: FormData): Promise<FormState> {
+  await requireMarketplaceUser();
+  const parsed = z.object({
+    amount: usdtInput,
+    direction: z.enum(["TO_MARKET", "TO_EXCHANGE"]),
+    requestKey: z.uuid(),
+  }).safeParse(Object.fromEntries(formData));
+  if(!parsed.success)return {error:"Укажите сумму USDT, до 6 знаков после запятой."};
+  try{
+    await marketRpc("transferMarketUsdt",[parsed.data]);
+  }catch(error){
+    const messages: Record<string,string> = {
+      INSUFFICIENT_FUNDS:"Недостаточно доступных USDT.",
+      WALLET_UNAVAILABLE:"Активный кошелёк USDT биржи не найден.",
+      WALLET_BUSY:"Дождитесь завершения операции с кошельком USDT.",
+      ACCOUNT_OPERATIONS_DISABLED:"Внутренние переводы для аккаунта недоступны.",
+      TRANSFER_CONFLICT:"Этот запрос уже использован для другого перевода.",
+    };
+    return {error:messages[error instanceof Error?error.message:""]??"Не удалось подтвердить перевод. Повторите запрос."};
+  }
+  revalidatePath("/wallet");
+  return {success:"Перевод выполнен."};
+}
 
 const projectIdSchema = z.object({
   projectId: z.string().trim().min(1),
@@ -134,27 +146,17 @@ const adminOrderSchema = z.object({
 });
 
 const adminCatalogItemSchema = z.object({
-  name: z.string().trim().min(2, "Название должно быть не короче 2 символов."),
-  kind: z.enum(["GAME", "SERVICE", "PLATFORM"]),
-  family: z.enum([
-    "ai",
-    "subscription",
-    "software",
-    "platform",
-    "social",
-    "shooter",
-    "mmorpg",
-    "mobile",
-    "sports",
-    "sandbox",
-    "strategy",
-  ]),
-  description: z.string().trim().optional(),
+  name: z.string().trim().min(2, "Название должно быть не короче 2 символов.").max(120).regex(/[a-z0-9а-яё]/i),
+  area: z.enum(['accounts','services','both']),
+  kind: z.string().trim().min(1).max(80),
+  family: z.string().trim().min(1).max(80),
+  description: z.string().trim().max(2000).optional(),
 });
 
 const adminCatalogSectionSchema = z.object({
   itemId: z.string().min(1),
-  sectionName: z.string().trim().min(2, "Название категории должно быть не короче 2 символов."),
+  sectionName: z.string().trim().min(2, "Название категории должно быть не короче 2 символов.").max(120).regex(/[a-z0-9а-яё]/i),
+  area: z.enum(['accounts','services']),
 });
 
 const projectPlatformIdSchema = z.enum(["TELEGRAM", "YOUTUBE", "TIKTOK", "INSTAGRAM", "VK", "DISCORD", "TWITCH"]);
@@ -196,17 +198,30 @@ function parseTargets(value: string) {
     .filter(Boolean);
 }
 
-export async function loginAction(_: FormState, formData: FormData): Promise<FormState> {
-  const parsed = parseState(loginSchema, formData);
-
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message };
-  }
-
+export async function loginAction(previous: FormState, formData: FormData): Promise<FormState> {
+  if(formData.get("cancelAuthenticator")==="1")return {};
+  const challenge=previous.challenge;
   try {
-    const result=await exchangeAuth('login',{username:parsed.data.email.toLowerCase(),password:parsed.data.password});
+    let result;
+    if(challenge){
+      const code=formData.get("code");
+      if(typeof code!=="string"||!code.trim()||code.length>40)return {challenge,error:"Введите код Authenticator или резервный код."};
+      result=await exchangeAuth("login",{challenge,code});
+    }else{
+      const parsed=parseState(loginSchema,formData);
+      if(!parsed.success)return {error:parsed.error.issues[0]?.message};
+      const identifier=parsed.data.email;
+      result=await exchangeAuth("login",{username:identifier.includes("@")?identifier.toLowerCase():identifier,password:parsed.data.password});
+    }
+    if(result.requiresAuthenticator&&typeof result.challenge==="string")return {challenge:result.challenge};
     await createSession(result.access_token);
-  } catch { return {error:'Неверный email или пароль, либо вход временно недоступен.'}; }
+  } catch(error) {
+    const failure=error as {status?:number;code?:string;message?:string};
+    if(failure.code==="MFA_EXPIRED")return {error:failure.message};
+    const errorMessage=failure.code==="MFA_INVALID"||failure.code==="MFA_RATE_LIMITED"||failure.status===429
+      ? failure.message : failure.status===401 ? "Неверный логин/email или пароль." : "Вход временно недоступен. Попробуйте позже.";
+    return {challenge,error:errorMessage};
+  }
   redirect('/');
 }
 
@@ -251,91 +266,6 @@ export async function sendMessageAction(_: FormState, formData: FormData): Promi
   return initialState;
 }
 
-export async function updateCurrencyAction(formData: FormData) {
-  const user = await requireUser();
-  const parsed = parseState(currencySchema, formData);
-
-  if (!parsed.success) {
-    redirect("/settings");
-  }
-
-  if (user.id !== ENV_ADMIN_ID) {
-    (await updateUserCurrency(user.id, parsed.data.currency));
-  }
-
-  revalidatePath("/");
-  revalidatePath("/wallet");
-  revalidatePath("/profile");
-  revalidatePath("/settings");
-  redirect(parsed.data.returnTo);
-}
-
-export async function topUpWalletAction(_: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireMarketplaceUser();
-  const parsed = parseState(walletSchema, formData);
-
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message };
-  }
-
-  try { (await createWalletTransactionRecord(user.id, {
-    type: "TOP_UP",
-    amountRub: convertCurrencyToRub(parsed.data.amount, parsed.data.currency),
-    description: "Пополнение баланса вручную",
-  })); } catch {return {error:'Не удалось создать заявку. Проверьте сумму и доступность пополнения.'};}
-
-  revalidatePath("/wallet");
-  revalidatePath("/");
-  return { success: "Заявка на пополнение отправлена. Средства появятся после проверки платежа администратором." };
-}
-
-export async function cryptoTopUpWalletAction(_: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireMarketplaceUser();
-  const parsed = parseState(cryptoWalletSchema, formData);
-
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message };
-  }
-
-  try { (await createWalletTransactionRecord(user.id, {
-    type: "TOP_UP",
-    amountRub: convertCurrencyToRub(parsed.data.amount, parsed.data.currency),
-    description: `Пополнение криптой ${parsed.data.asset} · ${parsed.data.network} · tx ${parsed.data.txHash.slice(0, 12)}`,
-  })); } catch {return {error:'Не удалось создать заявку. Проверьте сведения о платеже.'};}
-
-  revalidatePath("/wallet");
-  revalidatePath("/profile");
-  revalidatePath("/");
-  return { success: "Заявка отправлена на проверку платежа." };
-}
-
-export async function withdrawWalletAction(_: FormState, formData: FormData): Promise<FormState> {
-  const user = await requireMarketplaceUser();
-  const parsed = parseState(walletSchema, formData);
-
-  if (!parsed.success) {
-    return { error: parsed.error.issues[0]?.message };
-  }
-
-  try {
-    (await createWalletTransactionRecord(user.id, {
-      type: "WITHDRAWAL",
-      amountRub: convertCurrencyToRub(parsed.data.amount, parsed.data.currency),
-      description: `Вывод средств: ${parsed.data.details||'реквизиты уточнить у пользователя'}`,
-    }));
-  } catch (error) {
-    if (error instanceof Error && error.message === "INSUFFICIENT_FUNDS") {
-      return { error: "Недостаточно средств для вывода." };
-    }
-
-    return {error:'Не удалось создать вывод. Проверьте остаток, реквизиты и доступность операции.'};
-  }
-
-  revalidatePath("/wallet");
-  revalidatePath("/");
-  return { success: "Заявка на вывод создана." };
-}
-
 export async function createSupportTicketAction(_: FormState, formData: FormData): Promise<FormState> {
   const user = await requireUser();
   const parsed = parseState(supportSchema, formData);
@@ -366,7 +296,8 @@ export async function createListingAction(_: FormState, formData: FormData): Pro
       title: parsed.data.title,
       description: parsed.data.description,
       deliveryNote: parsed.data.deliveryNote,
-      priceRub: convertCurrencyToRub(parsed.data.price, parsed.data.currency),
+      priceRub: 0,
+      priceUsdt: parsed.data.price,
       quantity: parsed.data.quantity,
       autoPayloads: String(formData.get('autoPayloads')||'').split('\n').map(s=>s.trim()).filter(Boolean),
       deliveryType: parsed.data.deliveryType,
@@ -374,6 +305,7 @@ export async function createListingAction(_: FormState, formData: FormData): Pro
     }));
   } catch (error) {
     if (error instanceof Error && error.message === 'MARKET_SECTION_DISABLED') return {error:'Доступ к этому разделу отключён администратором.'};
+    if(error instanceof Error&&['CATALOG_UNAVAILABLE','SECTION_NOT_FOUND','CATALOG_ITEM_NOT_FOUND'].includes(error.message))return {error:'Категория или подкатегория отключена. Выберите доступный раздел.'};
     return { error: "Не удалось сохранить предложение. Проверь раздел и повтори попытку." };
   }
 
@@ -398,6 +330,7 @@ export async function createPurchaseAction(_: FormState, formData: FormData): Pr
       listingId: parsed.data.listingId,
       quantity: parsed.data.quantity,
       message: parsed.data.message,
+      requestKey: parsed.data.requestKey,
     }));
   } catch (error) {
     if (error instanceof Error && error.message === "SELF_PURCHASE") {
@@ -451,7 +384,9 @@ export async function createProjectAction(_: FormState, formData: FormData): Pro
       messageText: serviceSetting?.requiresMessage ? messageText : null,
       targetSource: parsed.data.targetSource,
       targets,
-      rewardPerTargetRub: convertCurrencyToRub(parsed.data.rewardPerTarget, parsed.data.currency),
+      rewardPerTargetRub: 0,
+      rewardPerTargetUsdt: parsed.data.rewardPerTarget,
+      requestKey: parsed.data.requestKey,
     }));
     projectId = project.id;
   } catch (error) {
@@ -557,18 +492,18 @@ export async function adminCreateCatalogItemAction(formData: FormData) {
   const parsed = parseState(adminCatalogItemSchema, formData);
 
   if (!parsed.success) {
-    redirect("/admin");
+    redirect("/admin?catalog=invalid");
   }
 
   try {
     (await createCatalogItemRecord(parsed.data));
-  } catch {
-    redirect("/admin");
+  } catch (error) {
+    redirect(error instanceof Error&&error.message==='CATALOG_ITEM_EXISTS'?'/admin?catalog=exists':'/admin?catalog=failed');
   }
 
   revalidatePath("/");
   revalidatePath("/admin");
-  redirect("/admin");
+  redirect("/admin?catalog=created");
 }
 
 export async function adminCreateCatalogSectionAction(formData: FormData) {
@@ -576,18 +511,28 @@ export async function adminCreateCatalogSectionAction(formData: FormData) {
   const parsed = parseState(adminCatalogSectionSchema, formData);
 
   if (!parsed.success) {
-    redirect("/admin");
+    redirect("/admin?catalog=invalid");
   }
 
   try {
-    (await createCatalogSectionRecord(parsed.data.itemId, parsed.data.sectionName));
-  } catch {
-    redirect("/admin");
+    (await createCatalogSectionRecord(parsed.data.itemId, parsed.data.sectionName, parsed.data.area));
+  } catch (error) {
+    redirect(error instanceof Error&&error.message==='SECTION_EXISTS'?'/admin?catalog=exists':'/admin?catalog=failed');
   }
 
   revalidatePath("/");
   revalidatePath("/admin");
-  redirect("/admin");
+  redirect("/admin?catalog=section-created");
+}
+
+export async function adminUpdateCatalogAvailabilityAction(formData:FormData){
+ await requireAdminUser();
+ const parsed=z.object({itemId:z.string().min(1).max(200),area:z.enum(['accounts','services']),sections:z.array(z.string().min(1).max(300)).max(1000),enabled:z.boolean()}).safeParse({itemId:formData.get('itemId'),area:formData.get('area'),sections:formData.getAll('sections'),enabled:formData.get('enabled')==='true'});
+ if(!parsed.success)redirect('/admin?catalog=invalid');
+ const {itemId,area,sections,enabled}=parsed.data;
+ try{await updateCatalogAvailabilityRecord(itemId,area,sections,enabled);}catch{redirect('/admin?catalog=failed');}
+ revalidatePath('/');revalidatePath('/admin');revalidatePath('/catalog');
+ redirect('/admin?catalog=availability-saved');
 }
 
 export async function adminUpdateProjectPlatformAction(formData: FormData) {

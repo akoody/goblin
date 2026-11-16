@@ -3,7 +3,7 @@ import {atomicSol} from './solana-client.js';
 export const solUnits=value=>new Decimal(String(value)).div(1e9).toFixed(9);
 export function launchInput(body,policy){
  const name=String(body.name||'').trim(),symbol=String(body.symbol||'').trim();
- if(!name||Buffer.byteLength(name)>32||!symbol||!/^[A-Za-z0-9]{1,13}$/.test(symbol))throw new Error('Название: до 32 байт; тикер: 1–13 латинских букв или цифр');
+ if(!name||Buffer.byteLength(name)>32||!symbol||!/^[A-Za-z0-9]{1,13}$/.test(symbol))throw new Error('Название: до 32 байт; тикер: 1-13 латинских букв или цифр');
  const description=String(body.description||'').trim();if(description.length>2000)throw new Error('Описание: максимум 2000 символов');
  const image=String(body.image||'');
  if(image.length>1400000||!/^data:image\/(png|jpeg);base64,[A-Za-z0-9+/]+={0,2}$/.test(image))throw new Error('Загрузите PNG или JPEG до 1 МБ');

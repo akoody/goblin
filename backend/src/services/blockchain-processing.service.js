@@ -12,6 +12,7 @@ import {
 } from "./tron.service.js";
 import { reconcileTronWithdrawals } from "./withdrawal.service.js";
 import { recordPendingDeposit } from './deposit-compliance.service.js';
+import {tronPollSchedule} from './tron-poll-schedule.js';
 
 const SCAN_INTERVAL_MS = 15_000;
 const CURSOR_OVERLAP_MS = 60_000;
@@ -104,14 +105,19 @@ const scanDeposits = async () => {
      ORDER BY w.id`
   );
 
+  tronPollSchedule.prune(wallets.map(wallet=>wallet.id));
   for (const wallet of wallets) {
+    if(!tronPollSchedule.due(wallet.id))continue;
     try {
       const cursor = Number(wallet.scan_cursor || 0);
       const nextCursor = wallet.currency === "TRX"
         ? await scanTrxWallet(wallet, cursor)
         : await scanUsdtWallet(wallet, cursor);
       await saveCursor(wallet.id, wallet.currency, nextCursor);
+      tronPollSchedule.complete(wallet.id);
     } catch (error) {
+      tronPollSchedule.defer(wallet.id,error.retryAt);
+      if(error.code==='TRON_RATE_LIMITED')break;
       console.error(`Blockchain scan failed for wallet ${wallet.id} ${wallet.currency}:`, error.message);
     }
   }

@@ -12,6 +12,10 @@
  > nav {min-width:0;flex-wrap:wrap;gap:8px 24px;}
 }
 .intro {max-width:76ch;color:var(--text-muted);}
+.heading {display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:16px;}
+.createButton {padding:12px 18px;min-height:44px;border:1px solid var(--primary-deep);border-radius:6px;background:var(--primary-deep);color:#fff;font:inherit;cursor:pointer;max-width:100%;}
+.createButton:focus-visible {outline:2px solid var(--primary-deep);outline-offset:3px;}
+.creation form {scroll-margin-top:120px;}
 .workspace {
  display:grid;
  grid-template-columns:minmax(0,1fr) minmax(0,1fr);

@@ -9,8 +9,10 @@ import {ScrollableNav} from '../../Components/ScrollableNav/ScrollableNav';
 import {confirmSaveClick,confirmSaveSubmit} from '../../Components/AdminSaveConfirmation';
 import {WalletHelp} from './WalletHelp';
 import {TreasuryCollection} from './TreasuryCollection';
+import {TreasuryPayouts} from './TreasuryPayouts';
 import {NativeChains} from './NativeChains';
 import {PumpAdmin} from '../Content/CreateCoin';
+import {PushBroadcast} from './PushBroadcast';
 
 import { Referrals } from './Referrals';
 import { GuarantorDeals } from './GuarantorDeals';
@@ -40,6 +42,7 @@ import api from "../../api";
 import { getApiErrorMessage } from "../../utils/notifications";
 import styles from "./Admin.module.scss";
 
+function TreasuryDetails({title,children}){const [open,setOpen]=useState(false);return <details onToggle={event=>setOpen(event.currentTarget.open)}><summary>{title}</summary>{open&&children}</details>;}
 const statusLabels = {
   all: "Все",
   open: "Открытые",
@@ -1288,6 +1291,7 @@ export const Admin = () => {
         <button type="button" onClick={()=>setActiveSection('pump')}>Создание мемкоинов</button>
         <button type="button" onClick={()=>setActiveSection('bonuses')}>Бонусы</button>
         <button type="button" onClick={()=>setActiveSection('content')}>Новости и о проекте</button>
+        <button type="button" onClick={()=>setActiveSection('broadcast')}>Рассылка</button>
         <button type="button" className={activeSection==='helpers'?styles.admin_tabActive:''} onClick={()=>setActiveSection('helpers')}><FiUsers/>Хелперы</button>
         <button type="button" className={activeSection === "security" ? styles.admin_tabActive : ""} onClick={() => setActiveSection("security")}>
           <FiShield /> Безопасность{loginIps.unread > 0 ? ` (${loginIps.unread})` : ""}
@@ -1360,12 +1364,13 @@ export const Admin = () => {
         <button type="button" className={activeSection==='referrals'?styles.admin_tabActive:''} onClick={()=>setActiveSection('referrals')}><FiUsers/>Приглашения</button>
         <button type="button" className={activeSection==='guarantor'?styles.admin_tabActive:''} onClick={()=>setActiveSection('guarantor')}><FiShield/>Гарант</button>
       </ScrollableNav>
-      {activeSection==='treasury'&&<><WalletHelp/><TreasuryCollection/><NativeChains/><DepositCompliance/></>}
+      {activeSection==='treasury'&&<><TreasuryPayouts/><TreasuryDetails title="Сбор комиссий с адресов пользователей"><TreasuryCollection/><NativeChains/></TreasuryDetails><TreasuryDetails title="Комиссии пополнений, доходы и AML"><DepositCompliance/></TreasuryDetails><TreasuryDetails title="Как устроены кошелёк и AML"><WalletHelp/></TreasuryDetails></>}
       {activeSection==='helpers'&&<Helpers/>}
       {activeSection==='content'&&<ContentAdmin/>}
       {activeSection==='bonuses'&&<Bonuses admin/>}
 
       {activeSection==='pump'&&<PumpAdmin/>}
+      {activeSection==='broadcast'&&<PushBroadcast/>}
 
       {activeSection==='referrals'&&<Referrals/>}
       {activeSection==='guarantor'&&<GuarantorDeals/>}
@@ -1383,7 +1388,7 @@ export const Admin = () => {
         <div className={styles.loginSecurityTable}><table>
           <thead><tr><th>Аккаунт</th><th>IP</th><th>Устройство</th><th>ОС</th><th>Браузер</th><th>Предыдущий IP</th><th>Первый вход</th><th>Последний вход</th><th>Входов</th><th>Статус</th></tr></thead>
           <tbody>{loginIps.rows.map((entry) => <tr key={entry.id}>
-            <td>{entry.username} · #{entry.user_id}</td><td>{entry.ip}</td><td title={entry.user_agent}>{entry.device}</td><td>{entry.os}</td><td>{entry.browser}</td><td>{entry.previous_ip || "—"}</td>
+            <td>{entry.username} · #{entry.user_id}</td><td>{entry.ip}</td><td title={entry.user_agent}>{entry.device}</td><td>{entry.os}</td><td>{entry.browser}</td><td>{entry.previous_ip || "-"}</td>
             <td>{new Date(entry.first_seen_at).toLocaleString("ru-RU")}</td><td>{new Date(entry.last_seen_at).toLocaleString("ru-RU")}</td><td>{entry.login_count}</td>
             <td>{entry.is_new_ip && !entry.reviewed_at ? <button type="button" onClick={() => reviewLoginIp(entry.id)}>Новый IP · Просмотрено</button> : entry.is_new_ip ? "Просмотрено" : "Первый IP"}</td>
           </tr>)}{!loginIps.rows.length && !loginIpsError && !loginIpsLoading && <tr><td colSpan="10">{loginIpQuery.trim()?'По вашему запросу входов не найдено.':'История появится после следующих входов пользователей.'}</td></tr>}</tbody>
@@ -1801,14 +1806,15 @@ export const Admin = () => {
       {activeSection === "features" && (
         <section className={styles.admin_deals}>
           <div className={styles.admin_dealsTop}>
-            <div><h2>Доступность разделов</h2><p>Выключенный раздел покажет пользователям страницу обновления и заблокирует его API.</p></div>
+            <div><h2>Доступность разделов</h2><p>Управляйте доступом к разделам и торговле фьючерсами.</p></div>
             <button type="button" onClick={() => loadPlatformFeatures()} disabled={platformFeaturesLoading}><FiRefreshCw /> Обновить</button>
           </div>
           <div className={styles.admin_featureGrid}>
-            {[['p2p', 'P2P рынок'], ['processing', 'Процессинг'], ['nft', 'NFT Market'],['market','Маркет'],['guarantor','Гарант']].map(([feature, label]) => (
+            {[['p2p', 'P2P рынок'], ['processing', 'Процессинг'], ['nft', 'NFT Market'],['market','Маркет'],['guarantor','Гарант'],['futures','Фьючерсы']].map(([feature, label]) => (
               <article key={feature}>
                 <div><strong>{label}</strong><span>{platformFeatures[feature] === false ? "На обновлении" : "Доступен"}</span></div>
                 <button type="button" disabled={platformFeaturesLoading||Boolean(platformFeatureSaving)} aria-label={`${platformFeatures[feature]===false?'Включить':'Отключить'} ${label}`} className={platformFeatures[feature] === false ? styles.admin_featureOff : ""} onClick={() => handlePlatformFeatureChange(feature, platformFeatures[feature] === false)}>{platformFeatureSaving===feature?'Сохраняем…':platformFeatures[feature] === false ? "Включить" : "Отключить"}</button>
+                {feature==='futures'&&<p>Перед отключением закройте позиции и отмените активные ордера.</p>}
               </article>
             ))}
           </div>
@@ -2272,7 +2278,7 @@ export const Admin = () => {
                           </div>
                           <footer>
                             <b>{formatFiatAmount(requisite.used_amount, requisite.fiat_currency)} / {formatFiatAmount(requisite.limit_amount, requisite.fiat_currency)}</b>
-                            <small>{formatFiatAmount(requisite.min_transaction_amount, requisite.fiat_currency)}–{formatFiatAmount(requisite.max_transaction_amount, requisite.fiat_currency)}</small>
+                            <small>{formatFiatAmount(requisite.min_transaction_amount, requisite.fiat_currency)}-{formatFiatAmount(requisite.max_transaction_amount, requisite.fiat_currency)}</small>
                           </footer>
                         </article>
                       ))}

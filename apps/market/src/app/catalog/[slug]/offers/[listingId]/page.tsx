@@ -1,4 +1,5 @@
 import Link from "next/link";
+import {randomUUID} from "node:crypto";
 import { notFound } from "next/navigation";
 import { ArrowLeft, CheckCircle2, MessageCircle, ShieldCheck, Star } from "lucide-react";
 import { unstable_noStore as noStore } from "next/cache";
@@ -7,7 +8,7 @@ import { getCurrentUser } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getListingDetails } from "@/lib/db";
 import { getCatalogSectionPath } from "@/lib/routes";
-import { formatCurrency, formatDeliveryType, getInitials } from "@/lib/utils";
+import { formatMarketPrice, formatDeliveryType, getInitials } from "@/lib/utils";
 
 type ListingPageProps = {
   params: Promise<{
@@ -28,7 +29,6 @@ export default async function ListingPage({ params }: ListingPageProps) {
     notFound();
   }
 
-  const preferredCurrency = user?.preferredCurrency ?? "RUB";
   const isOwnListing = user?.id === listing.sellerId;
   const canBuy = Boolean(user && !admin && !isOwnListing);
 
@@ -72,7 +72,7 @@ export default async function ListingPage({ params }: ListingPageProps) {
         <div className="grid gap-4 sm:grid-cols-3">
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60">
             <div className="text-sm text-slate-500">Цена за 1 шт.</div>
-            <div className="mt-2 text-2xl font-semibold text-slate-950">{formatCurrency(listing.priceRub, preferredCurrency)}</div>
+            <div className="mt-2 text-2xl font-semibold text-slate-950">{formatMarketPrice(listing.priceUsdt)}</div>
           </div>
           <div className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm shadow-slate-200/60">
             <div className="text-sm text-slate-500">Рейтинг</div>
@@ -124,8 +124,10 @@ export default async function ListingPage({ params }: ListingPageProps) {
             Оплата резервируется до завершения заказа.
           </div>
 
-          {canBuy ? (
-            <PurchaseForm listingId={listing.id} priceRub={listing.priceRub} preferredCurrency={preferredCurrency} />
+          {listing.priceUsdt === undefined ? (
+            <p className="text-sm text-slate-500">Цена недоступна.</p>
+          ) : canBuy ? (
+            <PurchaseForm listingId={listing.id} requestKey={randomUUID()} priceUsdt={listing.priceUsdt} />
           ) : user ? (
             <div className="rounded-lg bg-slate-50 px-4 py-3 text-sm leading-6 text-slate-500">
               {isOwnListing ? "Это твоё предложение. Покупка собственного оффера недоступна." : "Администратор не может оформлять покупки."}

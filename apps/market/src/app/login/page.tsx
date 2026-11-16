@@ -29,8 +29,7 @@ export default async function LoginPage() {
             Goblin Market
           </div>
           <div className="mt-4 max-w-xl text-lg leading-8 text-slate-600">
-            Каталог аккаунтов, подписок, игровой валюты, ключей и цифровых офферов с покупками, продажами,
-            перепиской и админским контролем в одном контуре.
+            Аккаунты и услуги в одном маркете. Для входа используйте логин или email и пароль от биржи.
           </div>
         </div>
       </div>

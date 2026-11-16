@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import {attachmentName,removeEscrowAttachment,storeEscrowAttachment} from './escrow-attachment-files.js';
+import {scanEscrowAttachment} from './escrow-attachment-scan.js';
+import {notifyDealMessage,notifyDealEvent} from './push.service.js';
+import {beginPostCommit,afterCommit,finishPostCommit} from './post-commit.js';
+import {accrueReferral} from './referral-accrual.service.js';
 import {consumeFeeBonus,discountedFeePercent} from './fee-bonus.service.js';
 import {chatProfile} from './chat-profile.service.js';
 import {assertUserMarketArea} from './market-areas.js';
@@ -23,13 +28,16 @@ export async function transact(work) {
   const connection = await db.getConnection();
   try {
     await connection.beginTransaction();
+    beginPostCommit(connection);
     const result = await work(connection);
     await connection.commit();
+    finishPostCommit(connection,true);
     return result;
   } catch (error) {
     await connection.rollback();
     throw error;
   } finally {
+    finishPostCommit(connection,false);
     connection.release();
   }
 }
@@ -44,7 +52,7 @@ export async function isCommerceAdmin(userId) {
   const [[user]] = await db.execute("SELECT email FROM users WHERE id = ?", [
     userId,
   ]);
-  return Boolean(user && emails.includes(user.email.toLowerCase()));
+  return Boolean(user?.email && emails.includes(user.email.toLowerCase()));
 }
 
 // Wallet balance is the total amount; locked_balance is a subset reserved for
@@ -93,6 +101,8 @@ async function event(c, deal, actor, action, note = "") {
     "INSERT INTO commerce_events (deal_id,actor_id,action,note) VALUES (?,?,?,?)",
     [deal, actor, action, note],
   );
+  const type={join:'deal_ready',fund:'deal_funded',deliver:'deal_delivered',dispute:'deal_disputed',complete:'deal_completed','resolve-pay':'deal_completed',refund:'deal_refunded','resolve-refund':'deal_refunded',cancel:'deal_cancelled','admin-cancel':'deal_cancelled'}[action];
+  if(type)afterCommit(c,()=>notifyDealEvent('commerce',deal,type));
 }
 async function reserve(c, deal, actor) {
   if (deal.currency === "USDT") {
@@ -375,8 +385,10 @@ export async function dealDetails(userId, id) {
     fail("Нет доступа к сделке", 403);
   }
   const [messages] = await db.execute(
-    `SELECT m.*,u.username AS sender_name FROM commerce_messages m JOIN users u ON u.id=m.sender_id
-    WHERE deal_id=? ORDER BY m.id DESC LIMIT 200`,
+    `SELECT m.*,u.username AS sender_name,a.id AS attachment_id,a.filename AS attachment_name,a.size_bytes AS attachment_size
+    FROM commerce_messages m JOIN users u ON u.id=m.sender_id
+    LEFT JOIN commerce_message_attachments a ON a.message_id=m.id
+    WHERE m.deal_id=? ORDER BY m.id DESC LIMIT 200`,
     [id],
   );
   const [events] = await db.execute(
@@ -405,6 +417,7 @@ export async function actOnDeal(userId, id, body, admin = false) {
       [id],
     );
     if (!deal) fail("Сделка не найдена", 404);
+    if (deal.kind === "MARKET") fail("Операции маркета доступны в USDT на /market", 410);
     const next = transition(deal, userId, action, admin);
     if (next === "FUNDED") {
       await activeAccounts(c, [deal.buyer_id, deal.seller_id]);
@@ -440,6 +453,7 @@ export async function actOnDeal(userId, id, body, admin = false) {
               [fee.toFixed(6)],
             );
             await ledger(c, recipient, deal.currency, fee.neg().toFixed(6), id, "GUARANTEE_FEE");
+            await accrueReferral(c,{kind:'ESCROW',sourceId:id,payerId:recipient,sourceUserId:deal.buyer_id,currency:'USDT',fee:fee.toFixed(6)});
           }
         }
         if (deal.kind === "ESCROW" && deal.currency === "USDT") {
@@ -557,26 +571,58 @@ export async function markEscrowMessagesRead(adminId, id) {
     return { success: true };
   });
 }
-export async function sendMessage(userId, id, value) {
+async function requireWritableChat(deal,userId) {
+  if (!deal || (!participant(deal,userId) && !(await isCommerceAdmin(userId))))fail("Нет доступа к чату",403);
+  if (["COMPLETED","REFUNDED","CANCELLED"].includes(deal.status))fail("Чат закрытой сделки доступен только для чтения",409);
+}
+
+export async function sendMessage(userId, id, value, attachment) {
   uuid(id);
-  const message = text(value, 1, 2000, "сообщение");
-  return transact(async (c) => {
+  const message=text(value,attachment?0:1,2000,"сообщение");
+  const result=await transact(async (c) => {
     const [[deal]] = await c.execute(
       "SELECT * FROM commerce_deals WHERE id=? FOR UPDATE",
       [id],
     );
-    if (
-      !deal ||
-      (!participant(deal, userId) && !(await isCommerceAdmin(userId)))
-    )
-      fail("Нет доступа к чату", 403);
-    if (["COMPLETED", "REFUNDED", "CANCELLED"].includes(deal.status))
-      fail("Чат закрытой сделки доступен только для чтения", 409);
-    await c.execute(
+    await requireWritableChat(deal,userId);
+    if(attachment&&deal.kind!=='ESCROW')fail('Вложения доступны в чате гаранта',404);
+    const [row]=await c.execute(
       "INSERT INTO commerce_messages (deal_id,sender_id,text) VALUES (?,?,?)",
       [id, userId, message],
     );
+    if(attachment)await c.execute(
+      'INSERT INTO commerce_message_attachments (message_id,id,filename,size_bytes) VALUES (?,?,?,?)',
+      [row.insertId,attachment.id,attachment.name,attachment.size]);
   });
+  notifyDealMessage('commerce',id,userId);
+  return result;
+}
+
+export async function sendEscrowAttachment(userId,dealId,{buffer,name,caption}){
+  uuid(dealId);
+  const message=text(caption,0,2000,'сообщение');
+  const [[deal]]=await db.execute('SELECT * FROM commerce_deals WHERE id=?',[dealId]);
+  await requireWritableChat(deal,userId);
+  if(deal.kind!=='ESCROW')fail('Вложения доступны в чате гаранта',404);
+  await scanEscrowAttachment(buffer);
+  const attachment={id:randomUUID(),name:attachmentName(name),size:buffer.length};
+  try{
+    await storeEscrowAttachment(attachment.id,buffer);
+    return await sendMessage(userId,dealId,message,attachment);
+  }catch(error){
+    await removeEscrowAttachment(attachment.id);
+    throw error;
+  }
+}
+
+export async function getEscrowAttachment(userId,dealId,attachmentId){
+  uuid(dealId);
+  uuid(attachmentId);
+  const [[attachment]]=await db.execute(`SELECT a.filename,d.buyer_id,d.seller_id,d.creator_id
+    FROM commerce_message_attachments a JOIN commerce_messages m ON m.id=a.message_id
+    JOIN commerce_deals d ON d.id=m.deal_id WHERE d.id=? AND a.id=? AND d.kind='ESCROW'`,[dealId,attachmentId]);
+  if(!attachment||(!participant(attachment,userId)&&!await isCommerceAdmin(userId)))fail('Вложение не найдено',404);
+  return attachment;
 }
 export async function dashboard(userId) {
   const [[user]] = await db.execute(

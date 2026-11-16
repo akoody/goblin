@@ -1,5 +1,6 @@
 import Decimal from "decimal.js";
 import { TronWeb } from "tronweb";
+import {budgetTronProviders,tronRequestBudget} from './tron-request-budget.js';
 
 const DEFAULT_FULL_HOST = "https://api.trongrid.io";
 export const TRON_USDT_CONTRACT = "TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t";
@@ -12,13 +13,14 @@ const getHeaders = () => {
   return apiKey ? { "TRON-PRO-API-KEY": apiKey } : {};
 };
 
-export const createTronWeb = (privateKey) => new TronWeb({
+export const createTronWeb = (privateKey) => budgetTronProviders(new TronWeb({
   fullHost: getFullHost(),
   headers: getHeaders(),
   ...(privateKey ? { privateKey: privateKey.replace(/^0x/, "") } : {}),
-});
+}),getFullHost());
 
-const fetchJson = async (url, options = {}) => {
+const fetchJson = async (url, options = {}) => tronRequestBudget.run(async () => {
+  if(new URL(url).origin!==new URL(getFullHost()).origin)throw new Error('Unexpected TRON API origin');
   const response = await fetch(url, {
     ...options,
     headers: {
@@ -28,15 +30,17 @@ const fetchJson = async (url, options = {}) => {
       ...options.headers,
     },
     signal: AbortSignal.timeout(15_000),
+    redirect: 'error',
   });
   const body = await response.json().catch(() => ({}));
   if (!response.ok) {
-    const error = new Error(body.error || body.message || `TRON API returned ${response.status}`);
+    const error = new Error(body.Error || body.error || body.message || `TRON API returned ${response.status}`);
     error.status = response.status;
+    error.retryAfter=response.headers.get('retry-after');
     throw error;
   }
   return body;
-};
+});
 
 export const isTronAddress = (address) => TronWeb.isAddress(String(address || "").trim());
 
@@ -71,6 +75,7 @@ const fetchAllPages = async (initialUrl) => {
     if (Array.isArray(response.data)) items.push(...response.data);
     url = response.meta?.links?.next || null;
   }
+  if(url)throw new Error('TRON pagination limit reached; cursor was not advanced');
   return items;
 };
 

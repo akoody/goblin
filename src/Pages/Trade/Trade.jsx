@@ -5,9 +5,10 @@ import { RiBtcLine } from "react-icons/ri";
 import { PiCurrencyEth } from "react-icons/pi";
 import api from "../../api";
 import styles from "./Trade.module.scss";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import { PriceChart } from './PriceChart';
 import { OrderBook } from './OrderBook';
+import {BybitFutures} from './BybitFutures';
 
 const PAIRS = {
   "BTC-USDT": { base: "BTC", icon: <RiBtcLine />, precision: 6 },
@@ -21,7 +22,7 @@ const format = (value, digits = number(value)!==0&&Math.abs(number(value))<1 ? 1
   new Intl.NumberFormat("ru-RU", { maximumFractionDigits: digits }).format(number(value));
 const compact = (value) =>
   new Intl.NumberFormat("ru-RU", { notation: "compact", maximumFractionDigits: 2 }).format(number(value));
-const dateTime = (value) => value ? new Date(value).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "—";
+const dateTime = (value) => value ? new Date(value).toLocaleString("ru-RU", { dateStyle: "short", timeStyle: "short" }) : "-";
 
 export const Trade = () => {
   const isLoggedIn = Boolean(localStorage.getItem("token"));
@@ -29,7 +30,12 @@ export const Trade = () => {
   const location = useLocation();
   const login = () => navigate("/login", { state: { from: location } });
   const [market, setMarket] = useState("SPOT");
+  const [bybitMode,setBybitMode]=useState(false);
+  const [pumpPairs,setPumpPairs]=useState([]);
+  const [futuresEnabled,setFuturesEnabled]=useState(null);
   const [symbol, setSymbol] = useState("BTC-USDT");
+  const [searchParams]=useSearchParams();
+  const requestedPair=searchParams.get('pair');
   const [snapshot, setSnapshot] = useState(null);
   const [state, setState] = useState({ book: { asks: [], bids: [] }, orders: [], fills: [], wallets: [], positions: [], funding: {} });
   const [side, setSide] = useState("BUY");
@@ -41,36 +47,88 @@ export const Trade = () => {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const orderPanelRef = useRef(null);
-  const pair = PAIRS[symbol];
+  const requestSequence = useRef(0);
+  const marketKey = useRef('');
+  marketKey.current = `${market}:${symbol}`;
+  const pump=market==='SPOT'?pumpPairs.find(item=>item.id===symbol):null;
+  const pair = PAIRS[symbol]??{base:pump?.ticker??'Токен',precision:6,icon:<FiActivity/>};
+  const openedPair=useRef(null);
+
+  useEffect(()=>{
+    if(requestedPair&&openedPair.current!==requestedPair&&pumpPairs.some(item=>item.id===requestedPair)){
+      openedPair.current=requestedPair;
+      setMarket('SPOT');
+      setSymbol(requestedPair);
+    }
+  },[requestedPair,pumpPairs]);
+
+  useEffect(()=>{
+    const controller=new AbortController();
+    const refresh=()=>api.get('/api/features',{signal:controller.signal})
+      .then(({data})=>{if(!controller.signal.aborted)setFuturesEnabled(data.futures===true);})
+      .catch(()=>{});
+    refresh();
+    const timer=window.setInterval(refresh,7000);
+    return ()=>{controller.abort();window.clearInterval(timer);};
+  },[]);
+
+  useEffect(()=>{
+    const controller=new AbortController();
+    const refresh=()=>api.get('/exchange/spot-pairs',{signal:controller.signal})
+      .then(({data})=>{if(!controller.signal.aborted&&Array.isArray(data))setPumpPairs(data);})
+      .catch(()=>{});
+    refresh();
+    const timer=window.setInterval(refresh,15000);
+    return ()=>{controller.abort();window.clearInterval(timer);};
+  },[]);
+
+  useEffect(()=>{
+    if(futuresEnabled===false)setMarket('SPOT');
+  },[futuresEnabled]);
 
   const load = useCallback(async (quiet = false) => {
+    const key=`${market}:${symbol}`;
+    if(key!==marketKey.current)return;
+    const sequence=++requestSequence.current;
     if (!quiet) setLoading(true);
     try {
-      const [marketResponse, stateResponse] = await Promise.all([
-        api.get(`/exchange/market/${symbol}`),
-        isLoggedIn ? api.get("/exchange/state", { params: { market, symbol } }) : Promise.resolve(null),
+      const [quote, exchange] = await Promise.allSettled([
+        api.get(`/exchange/market/${symbol}`,{params:{market}}),
+        isLoggedIn ? api.get("/exchange/state", { params: { market, symbol } }) : api.get(`/exchange/book/${symbol}`, {params:{market}}),
       ]);
-      setSnapshot(marketResponse.data);
-      if (stateResponse) setState(stateResponse.data);
-      setPrice((current) => current || String(Number(marketResponse.data.price).toFixed(2)));
+      if(sequence!==requestSequence.current||key!==marketKey.current)return;
+      if (quote.status === 'fulfilled') {
+        setSnapshot(quote.value.data);
+        if(quote.value.data.price)setPrice(current => current || String(quote.value.data.price));
+      } else setSnapshot(null);
+      if (exchange.status === 'fulfilled') {
+        if (isLoggedIn) setState(exchange.value.data);
+        else setState(previous => ({...previous, book:exchange.value.data}));
+      } else throw exchange.reason;
     } catch (error) {
-      if (!quiet) enqueueSnackbar(error.response?.data?.message || "Не удалось загрузить рынок", { variant: "error" });
+      if (!quiet&&sequence===requestSequence.current&&key===marketKey.current) enqueueSnackbar(error.response?.data?.message || "Не удалось загрузить рынок", { variant: "error" });
     } finally {
-      if (!quiet) setLoading(false);
+      if (sequence===requestSequence.current&&key===marketKey.current) setLoading(false);
     }
   }, [market, symbol, isLoggedIn]);
 
   useEffect(() => {
-    document.title = `${pair.base}/USDT — Торговля Goblin`;
+    if(bybitMode){
+      document.title='Фьючерсы Bybit Testnet - Goblin';
+      return;
+    }
+    document.title = `${pair.base}/USDT - Торговля Goblin`;
     setPrice(""); setQuantity(""); setSelectedPrice('');
+    setSnapshot(null);
+    setState(previous=>({...previous,book:{asks:[],bids:[]},orders:[],fills:[],positions:[],funding:{}}));
     load();
     const timer = window.setInterval(() => load(true), 7000);
-    return () => window.clearInterval(timer);
-  }, [load, pair.base]);
+    return () => {window.clearInterval(timer);requestSequence.current++;};
+  }, [load, pair.base, bybitMode]);
 
   const wallet = (currency) => state.wallets.find((item) => item.currency === currency) || {};
-  const available = side === "BUY" || market === "FUTURES" ? number(wallet("USDT").available) : number(wallet(pair.base).available);
-  const orderPrice = orderType === "MARKET" ? number(snapshot?.price) : number(price);
+  const available = side === "BUY" || market === "FUTURES" ? number(wallet("USDT").available) : number(wallet(pump?symbol:pair.base).available);
+  const orderPrice = orderType === "MARKET" ? number(pump?(side==='BUY'?state.book.asks[0]?.price:state.book.bids[0]?.price):snapshot?.price) : number(price);
   const total = number(quantity) * orderPrice;
   const required = market === "FUTURES" ? total / leverage : side === "BUY" ? total : number(quantity);
   const positive = number(snapshot?.change24h) >= 0;
@@ -91,6 +149,7 @@ export const Trade = () => {
       setQuantity("");
       await load(true);
     } catch (error) {
+      if(error.response?.data?.code==='FUTURES_DISABLED')setFuturesEnabled(false);
       enqueueSnackbar(error.response?.data?.message || "Ордер не удалось разместить", { variant: "error" });
     } finally { setSubmitting(false); }
   };
@@ -134,35 +193,40 @@ export const Trade = () => {
     <main className={styles.trade}>
       <section className={styles.topbar}>
         <div className={styles.markets}>
-          {["SPOT", "FUTURES"].map((item) => (
-            <button key={item} className={market === item ? styles.active : ""} onClick={() => setMarket(item)}>
+          {(futuresEnabled?["SPOT", "FUTURES"]:["SPOT"]).map((item) => (
+            <button key={item} className={!bybitMode&&market === item ? styles.active : ""} onClick={() => {if(item==='FUTURES'&&pump)setSymbol('BTC-USDT');setBybitMode(false);setMarket(item);}}>
               {item === "SPOT" ? "Спот" : "Фьючерсы"}
             </button>
           ))}
+          <button type="button" className={bybitMode?styles.active:''} onClick={()=>setBybitMode(true)}>Bybit Testnet</button>
         </div>
-        <div className={styles.pairs}>
-          <label>Торговая пара <select value={symbol} onChange={e=>setSymbol(e.target.value)}>{Object.entries(PAIRS).map(([key,value])=><option key={key} value={key}>{value.base}/USDT</option>)}</select></label>
+        {!bybitMode&&<><div className={styles.pairs}>
+          <label>Торговая пара <select aria-label="Торговая пара" value={symbol} onChange={e=>setSymbol(e.target.value)}>{Object.entries(PAIRS).map(([key,value])=><option key={key} value={key}>{value.base}/USDT</option>)}{market==='SPOT'&&pumpPairs.length>0&&<optgroup label="Мемкоины CryptoGoblin">{pumpPairs.map(item=><option key={item.id} value={item.id}>{item.ticker}/USDT · {item.name} · {item.mint.slice(-8)}</option>)}</optgroup>}</select></label>
         </div>
-        <button className={styles.refresh} onClick={() => load()} aria-label="Обновить рынок"><FiRefreshCw /></button>
+        <button className={styles.refresh} onClick={() => load()} aria-label="Обновить рынок"><FiRefreshCw /></button></>}
       </section>
 
+      <div hidden={!bybitMode}><BybitFutures active={bybitMode} isLoggedIn={isLoggedIn} login={login} newOrdersEnabled={futuresEnabled===true}/></div>
+      {!bybitMode&&<>
       <section className={styles.ticker}>
         <div className={styles.asset}><span>{pair.icon}</span><div><strong>{pair.base}/USDT</strong><small>{market === "SPOT" ? "Спотовый рынок" : "Бессрочный контракт"}</small></div></div>
-        <div><small>Последняя цена</small><strong className={positive ? styles.green : styles.red}>{format(snapshot?.price)} USDT</strong></div>
+        <div><small>Последняя цена</small><strong className={positive ? styles.green : styles.red}>{snapshot?.price?`${format(snapshot.price)} USDT`:'-'}</strong></div>
+        {pump?<div><small>Mint Solana</small><a href={`https://solscan.io/token/${pump.mint}`} target="_blank" rel="noreferrer">{pump.mint.slice(0,8)}…{pump.mint.slice(-8)}</a></div>:<>
         <div><small>24ч изменение</small><strong className={positive ? styles.green : styles.red}>{positive ? "+" : ""}{format(snapshot?.change24h, 2)}%</strong></div>
-        <div><small>Максимум 24ч</small><strong>{format(snapshot?.high24h, 2)}</strong></div>
-        <div><small>Минимум 24ч</small><strong>{format(snapshot?.low24h, 2)}</strong></div>
+        <div><small>Максимум 24ч</small><strong>{format(snapshot?.high24h)}</strong></div>
+        <div><small>Минимум 24ч</small><strong>{format(snapshot?.low24h)}</strong></div>
         <div><small>Объём 24ч</small><strong>{compact(snapshot?.volume24h)} USDT</strong></div>
-        <div className={styles.source}><FiActivity /> {market === "FUTURES" ? `Funding ${format(number(state.funding?.lastRate) * 100, 4)}%` : `${snapshot?.source || "—"}${snapshot?.stale ? " · задержка" : " · live"}`}</div>
+        </>}
+        {market==='FUTURES'&&<div className={styles.source}>Внутренний funding {format(number(state.funding?.lastRate)*100,4)}%</div>}
       </section>
 
       <section className={styles.workspace}>
         <div className={styles.chartPanel}>
           <div className={styles.panelTitle}><div><small>График</small><h2>{pair.base}/USDT · 1ч</h2></div><span>48 часов</span></div>
-          <PriceChart key={`${market}-${symbol}`} candles={snapshot?.candles} positive={positive} onSelectPrice={selectBookPrice} />
+          {pump&&!snapshot?.candles?.length?<p>График появится после первой сделки в стакане CryptoGoblin.</p>:<PriceChart key={`${market}-${symbol}`} candles={snapshot?.candles} positive={positive} onSelectPrice={selectBookPrice} />}
         </div>
 
-        <OrderBook key={`${market}-${symbol}`} snapshot={snapshot} base={pair.base} onSelectPrice={selectBookPrice} selectedPrice={orderType === "LIMIT" ? price : null} />
+        <OrderBook key={`${market}-${symbol}`} book={state.book} referencePrice={snapshot?.price} base={pair.base} onSelectPrice={selectBookPrice} selectedPrice={orderType === "LIMIT" ? price : null} />
 
         <form ref={orderPanelRef} className={styles.orderPanel} onSubmit={submit}>
           <div className={styles.sideTabs}>
@@ -192,9 +256,10 @@ export const Trade = () => {
           })}
         </div>}
         {state.orders.length > 0 ? <div className={styles.tableWrap}><table><thead><tr><th>Дата</th><th>Пара</th><th>Сторона</th><th>Тип</th><th>Цена</th><th>Исполнено</th><th>Статус</th><th></th></tr></thead><tbody>
-          {state.orders.map((order) => <tr key={order.id}><td>{dateTime(order.created_at)}</td><td>{order.symbol.replace("-", "/")}</td><td className={order.side === "BUY" ? styles.green : styles.red}>{order.side === "BUY" ? "Покупка" : "Продажа"}</td><td>{order.order_type === "LIMIT" ? "Лимит" : "Рынок"}</td><td>{format(order.price)}</td><td>{format(order.filled_quantity, pair.precision)} / {format(order.quantity, pair.precision)}</td><td><span className={styles.status}>{order.status}</span></td><td>{ACTIVE_STATUSES.has(order.status) && <button className={styles.cancel} onClick={() => cancel(order.id)} aria-label="Отменить ордер"><FiX /></button>}</td></tr>)}
+          {state.orders.map((order) => <tr key={order.id}><td>{dateTime(order.created_at)}</td><td>{pump?`${pair.base}/USDT`:order.symbol.replace("-", "/")}</td><td className={order.side === "BUY" ? styles.green : styles.red}>{order.side === "BUY" ? "Покупка" : "Продажа"}</td><td>{order.order_type === "LIMIT" ? "Лимит" : "Рынок"}</td><td>{format(order.price)}</td><td>{format(order.filled_quantity, pair.precision)} / {format(order.quantity, pair.precision)}</td><td><span className={styles.status}>{order.status}</span></td><td>{ACTIVE_STATUSES.has(order.status) && <button className={styles.cancel} onClick={() => cancel(order.id)} aria-label="Отменить ордер"><FiX /></button>}</td></tr>)}
         </tbody></table></div> : <div className={styles.empty}>{isLoggedIn ? "Здесь появятся ваши торговые ордера" : "Войдите в аккаунт, чтобы увидеть свои ордера"}</div>}
       </section>
+      </>}
     </main>
   );
 };

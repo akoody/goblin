@@ -16,7 +16,7 @@ const spaceGrotesk = Space_Grotesk({
 
 export const metadata: Metadata = {
   title: "Goblin Market",
-  description: "Маркетплейс аккаунтов, валюты, ключей, подписок и цифровых офферов.",
+  description: "Маркет аккаунтов и услуг Goblin.",
   icons: {
     icon: "/market/icon.svg",
     shortcut: "/market/icon.svg",

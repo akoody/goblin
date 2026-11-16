@@ -1,0 +1,27 @@
+CREATE TABLE referral_commission_policy (
+ id TINYINT UNSIGNED PRIMARY KEY,
+ rate_percent DECIMAL(5,2) NOT NULL DEFAULT 50,
+ updated_by BIGINT UNSIGNED NULL,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ CONSTRAINT chk_referral_policy_percent CHECK (rate_percent BETWEEN 0 AND 100)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+INSERT INTO referral_commission_policy(id,rate_percent) VALUES(1,50);
+
+CREATE TABLE referral_user_rates (
+ user_id BIGINT UNSIGNED PRIMARY KEY,
+ rate_percent DECIMAL(5,2) NOT NULL,
+ updated_by BIGINT UNSIGNED NOT NULL,
+ updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+ CONSTRAINT fk_referral_rate_user FOREIGN KEY(user_id) REFERENCES users(id),
+ CONSTRAINT chk_referral_user_percent CHECK (rate_percent BETWEEN 0 AND 100)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE referral_rate_audit (
+ id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+ actor_id BIGINT UNSIGNED NOT NULL,
+ scope VARCHAR(24) NOT NULL,
+ previous_json JSON NOT NULL,
+ new_json JSON NOT NULL,
+ created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ KEY idx_referral_rate_audit(created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

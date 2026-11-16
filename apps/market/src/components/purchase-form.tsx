@@ -3,24 +3,25 @@
 import { useActionState, useState } from "react";
 import { createPurchaseAction, type FormState } from "@/app/actions";
 import { SubmitButton } from "@/components/submit-button";
-import { formatCurrency } from "@/lib/utils";
+import { formatUsdt } from "@/lib/utils";
 
 const initialState: FormState = {};
 
 type PurchaseFormProps = {
   listingId: string;
-  priceRub: number;
-  preferredCurrency: "RUB" | "USD" | "EUR";
+  requestKey: string;
+  priceUsdt: string;
 };
 
-export function PurchaseForm({ listingId, priceRub, preferredCurrency }: PurchaseFormProps) {
+export function PurchaseForm({ listingId, requestKey, priceUsdt }: PurchaseFormProps) {
   const [state, formAction] = useActionState(createPurchaseAction, initialState);
   const [quantity, setQuantity] = useState(1);
-  const total = priceRub * quantity;
+  const total = formatUsdt(priceUsdt, quantity);
 
   return (
     <form action={formAction} className="space-y-4">
       <input type="hidden" name="listingId" value={listingId} />
+      <input type="hidden" name="requestKey" value={requestKey} />
 
       <label className="flex flex-col gap-2">
         <span className="text-sm font-semibold  text-slate-400">Получу</span>
@@ -29,15 +30,16 @@ export function PurchaseForm({ listingId, priceRub, preferredCurrency }: Purchas
           type="number"
           min={1}
           value={quantity}
-          onChange={(event) => setQuantity(Math.max(1, Number(event.target.value) || 1))}
+          max={100000}
+          onChange={(event) => setQuantity(Math.max(1, Math.min(100000, Math.trunc(Number(event.target.value)) || 1)))}
           className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3.5 text-base font-semibold outline-none focus:border-slate-300"
         />
       </label>
 
       <div className="rounded-lg border border-slate-200 bg-white px-4 py-3.5">
         <div className="text-sm font-semibold  text-slate-400">Заплачу</div>
-        <div className="mt-1 text-2xl font-semibold text-slate-950">{formatCurrency(total, preferredCurrency)}</div>
-        <div className="mt-1 text-sm text-slate-500">за {quantity} шт. по {formatCurrency(priceRub, preferredCurrency)}</div>
+        <div className="mt-1 text-2xl font-semibold text-slate-950">{total}</div>
+        <div className="mt-1 text-sm text-slate-500">за {quantity} шт. по {formatUsdt(priceUsdt)}</div>
       </div>
 
       <label className="flex flex-col gap-2">

@@ -20,7 +20,7 @@ export function detectNewsMedia(buffer){
 export const mediaView=row=>({id:row.id,name:row.filename,mime:row.mime,url:`/api/content/media/${row.id}`,size:Number(row.size_bytes)});
 export async function uploadNewsMedia(userId,buffer,name){
  const mime=detectNewsMedia(buffer),max=(mime.startsWith('image/')?5:20)*1024*1024;
- if(buffer.length>max)throw Object.assign(new Error(`Размер файла — не более ${max/1024/1024} МБ`),{status:413});
+ if(buffer.length>max)throw Object.assign(new Error(`Размер файла - не более ${max/1024/1024} МБ`),{status:413});
  const id=randomUUID(),filename=String(name||'Медиафайл').replace(/[\x00-\x1f/\\]/g,'_').slice(0,200);
  await mkdir(mediaDirectory,{recursive:true,mode:0o700});await writeFile(path.join(mediaDirectory,id),buffer,{flag:'wx',mode:0o600});
  try{await db.execute('INSERT INTO site_media(id,mime,filename,size_bytes,uploaded_by) VALUES(?,?,?,?,?)',[id,mime,filename,buffer.length,userId]);}catch(e){await unlink(path.join(mediaDirectory,id));throw e;}

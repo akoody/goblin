@@ -11,7 +11,7 @@
 .pairs button span { display:flex; font-size:20px; }
 .pairs .activePair { color:var(--text-dark); background:var(--primary-soft); border-color:rgba(76,161,31,.15); }
 .refresh { display:flex; align-items:center; justify-content:center; width:40px; height:40px; color:var(--primary-deep); background:var(--primary-soft); border-radius:50%; font-size:18px; }
-.ticker { display:grid; grid-template-columns:1.35fr repeat(5,minmax(100px,1fr)) auto; align-items:center; gap:16px; padding:16px 18px; }
+.ticker { display:grid; grid-template-columns:1.35fr repeat(5,minmax(100px,1fr)); align-items:center; gap:16px; padding:16px 18px; }
 .ticker>div { display:grid; gap:4px; min-width:0; }
 .ticker small,.panelTitle small,.activityHeader small { color:var(--text-muted); font-size:11px; font-weight:700; }
 .ticker strong { font-size:14px; white-space:nowrap; }
@@ -19,7 +19,7 @@
 .asset>span { display:flex; align-items:center; justify-content:center; width:42px; height:42px; color:#fff; background: var(--primary-deep); border-radius:50%; font-size:23px; }
 .asset div { display:grid; gap:3px; }
 .asset strong { font-size:17px; }
-.source { display:flex!important; grid-auto-flow:column; align-items:center; color:var(--primary-deep); font-size:11px; font-weight: 600; white-space:nowrap; }
+.source { display:flex!important; flex-wrap:wrap; grid-column:1 / -1; min-height:28px; align-items:center; color:var(--primary-deep); font-size:11px; font-weight:600; overflow-wrap:anywhere; }
 .green { color:#268214!important; }.red { color:#c43d27!important; }
 .workspace { display:grid; grid-template-columns:minmax(0,1.65fr) minmax(230px,.55fr) minmax(290px,.65fr); gap:14px; align-items:stretch; }
 .chartPanel,.bookPanel,.orderPanel { min-width:0; padding:16px; }
