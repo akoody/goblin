@@ -14,6 +14,7 @@ import { PumpAdmin } from '../Content/CreateCoin';
 import { PushBroadcast } from './PushBroadcast';
 import { Referrals } from './Referrals';
 import { GuarantorDeals } from './GuarantorDeals';
+import { IncomeReport } from './IncomeReport';
 import { FiActivity, FiCreditCard, FiDollarSign, FiList, FiMessageCircle, FiShield, FiUsers } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import styles from "./Admin.module.scss";
@@ -51,7 +52,7 @@ export const Admin = () => {
             <FiShield />
             Админ-панель
           </span>
-          <h1>{{support:'Поддержка клиентов',security:'Безопасность аккаунтов',deals:'P2P сделки',payments:'Способы оплаты',transactions:'Транзакции',processing:'Процессинг',trading:'Торговля',users:'Пользователи',features:'Доступность разделов',treasury:'Кошелёк и AML',referrals:'Реферальные приглашения',guarantor:'Сделки гаранта'}[activeSection] || 'Админ-панель'}</h1>
+          <h1>{{income:'Отчёт по деньгам',support:'Поддержка клиентов',security:'Безопасность аккаунтов',deals:'P2P сделки',payments:'Способы оплаты',transactions:'Транзакции',processing:'Процессинг',trading:'Торговля',users:'Пользователи',features:'Доступность разделов',treasury:'Кошелёк и AML',referrals:'Реферальные приглашения',guarantor:'Сделки гаранта'}[activeSection] || 'Админ-панель'}</h1>
           <Link to="/manage/commerce">Маркет и гарант: платежи и споры →</Link>
         </div>
       </section>
@@ -132,9 +133,11 @@ export const Admin = () => {
           Доступность
         </button>
         <button type="button" className={activeSection==='treasury'?styles.admin_tabActive:''} onClick={()=>setActiveSection('treasury')}><FiDollarSign/>Кошелёк и AML</button>
+        <button type="button" className={activeSection==='income'?styles.admin_tabActive:''} onClick={()=>setActiveSection('income')}><FiDollarSign/>Отчёт по деньгам</button>
         <button type="button" className={activeSection==='referrals'?styles.admin_tabActive:''} onClick={()=>setActiveSection('referrals')}><FiUsers/>Приглашения</button>
         <button type="button" className={activeSection==='guarantor'?styles.admin_tabActive:''} onClick={()=>setActiveSection('guarantor')}><FiShield/>Гарант</button>
       </ScrollableNav>
+      {activeSection==='income'&&<IncomeReport/>}
       {activeSection==='treasury'&&<><TreasuryPayouts/><TreasuryDetails title="Сбор комиссий с адресов пользователей"><TreasuryCollection/><NativeChains/></TreasuryDetails><TreasuryDetails title="Комиссии пополнений, доходы и AML"><DepositCompliance/></TreasuryDetails><TreasuryDetails title="Как устроены кошелёк и AML"><WalletHelp/></TreasuryDetails></>}
       {activeSection==='helpers'&&<Helpers/>}
       {activeSection==='content'&&<ContentAdmin/>}

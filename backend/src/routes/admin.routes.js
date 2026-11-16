@@ -10,6 +10,7 @@ import registerUsers from "./admin/users.js";
 import registerTransactions from "./admin/transactions.js";
 import registerTrading from "./admin/trading.js";
 import registerProcessing from "./admin/processing.js";
+import registerIncomeReport from "./admin/income-report.js";
 
 // Админка. Права проверяет requireAdmin: админ видит всё, хелпер только разрешённые ему маршруты.
 // Сами маршруты разложены по разделам в routes/admin/; порядок подключения сохраняет порядок маршрутов.
@@ -42,5 +43,6 @@ registerUsers(router);
 registerTransactions(router);
 registerTrading(router);
 registerProcessing(router);
+registerIncomeReport(router);
 
 export default router;
