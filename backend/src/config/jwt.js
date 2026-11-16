@@ -1,21 +1,32 @@
+import { randomBytes } from "node:crypto";
 import jwt from "jsonwebtoken";
 
-const developmentSecret = "dev-secret";
+const MIN_SECRET_BYTES = 32;
+const LOCAL_ENVIRONMENTS = new Set(["development", "test"]);
 
-export const getJwtSecret = () => {
-  const secret = String(process.env.JWT_SECRET || "").trim();
+// Без JWT_SECRET локально используется случайный секрет на время жизни
+// процесса: токены сбрасываются при перезапуске, но подделать их нельзя.
+let localSecret = null;
+
+/**
+ * Секрет подписи токенов. Вне явных development/test без JWT_SECRET
+ * сервис не работает: пропущенный NODE_ENV не должен включать слабый секрет.
+ */
+export const getJwtSecret = (env = process.env) => {
+  const secret = String(env.JWT_SECRET || "").trim();
   if (secret) {
-    if (Buffer.byteLength(secret, "utf8") < 32) {
-      throw new Error("JWT_SECRET must contain at least 32 bytes");
+    if (Buffer.byteLength(secret, "utf8") < MIN_SECRET_BYTES) {
+      throw new Error(`JWT_SECRET must contain at least ${MIN_SECRET_BYTES} bytes`);
     }
     return secret;
   }
 
-  if (process.env.NODE_ENV === "production") {
-    throw new Error("JWT_SECRET is required in production");
+  if (!LOCAL_ENVIRONMENTS.has(env.NODE_ENV)) {
+    throw new Error("JWT_SECRET is required unless NODE_ENV is development or test");
   }
 
-  return developmentSecret;
+  localSecret ??= randomBytes(MIN_SECRET_BYTES).toString("hex");
+  return localSecret;
 };
 
 export const signAccessToken = (payload) =>

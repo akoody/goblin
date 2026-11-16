@@ -9,7 +9,7 @@
     "migrate": "node scripts/migrate-db.js",
     "wallets:backfill-trx": "node scripts/backfill-trx-wallets.js",
     "wallets:repair": "node scripts/repair-wallets.js",
-    "test": "node --test"
+    "test": "NODE_ENV=test node --test"
   },
   "dependencies": {
     "@pump-fun/pump-sdk": "4.3.1",

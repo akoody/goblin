@@ -11,6 +11,10 @@ import { runMigrations } from "./scripts/migrate-db.js";
 import { startBlockchainEngine } from "./src/services/blockchain-processing.service.js";
 import { startSafioScreening } from './src/services/safio-screening.service.js';
 import { startNewsNotifications } from './src/services/push-broadcast.service.js';
+import { getJwtSecret } from "./src/config/jwt.js";
+
+// Проверяем секрет подписи до старта: без него сервер не поднимается.
+getJwtSecret();
 
 const PORT = process.env.PORT || 3000;
 const HOST = process.env.HOST || "127.0.0.1";

@@ -3,7 +3,6 @@
 import { revalidatePath } from "@/lib/market-navigation";
 import { redirect } from "@/lib/market-navigation";
 import { z } from "zod";
-import { getAuthenticatedHomePath, isAdminEmail, verifyEnvAdminPassword } from "@/lib/admin";
 import {
   clearSession,
   createSession,
@@ -23,8 +22,6 @@ import {
   createProjectRecord,
   createPurchaseRecord,
   createSupportTicketRecord,
-  createUser,
-  findUserByEmail,
   getProjectServiceSetting,
   isProjectServiceAvailable,
   updateProjectPlatformServicesRecord,
