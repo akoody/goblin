@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict';
-import {chromium} from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright-core';
 
 const base=process.env.SWAP_UI_BASE||'http://127.0.0.1:5188';
-const browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+const browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
 try {
  for(const width of [320,390,768,1440]){
   const context=await browser.newContext({viewport:{width,height:900}});

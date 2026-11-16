@@ -1,4 +1,4 @@
-import { chromium } from "/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs";
+import { chromium } from 'playwright-core';
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 
@@ -26,7 +26,7 @@ const deal = {
 };
 const browser = await chromium.launch({
   executablePath:
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    process.env.CHROME_PATH || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
   headless: true,
 });
 const errors = [];

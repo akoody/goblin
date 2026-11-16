@@ -2,7 +2,7 @@ import http from 'node:http';
 import { spawn } from 'node:child_process';
 import { once } from 'node:events';
 import assert from 'node:assert/strict';
-import { chromium } from '/Users/vladislav/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/node_modules/playwright/index.mjs';
+import { chromium } from 'playwright-core';
 const user={id:'qa-design-user',name:'Проверка интерфейса',email:'design@example.test',role:'BOTH',bio:null,city:null,preferredCurrency:'RUB',createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()};
 const operations=[];
 const fixture=http.createServer(async(req,res)=>{
@@ -31,7 +31,7 @@ let logs='';server.stdout.on('data',data=>logs+=data);server.stderr.on('data',da
 let browser;let count=0;
 try{
  for(let i=0;i<50;i++){try{if((await fetch('http://127.0.0.1:5182/market')).ok)break;}catch{}await new Promise(resolve=>setTimeout(resolve,200));}
- browser=await chromium.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
+ browser=await chromium.launch({executablePath:process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',headless:true});
  const context=await browser.newContext();
  await context.addCookies([{name:'goblin_market_session',value:'mock-design-only',domain:'127.0.0.1',path:'/'}]);
  const page=await context.newPage();const errors=[];page.on('pageerror',error=>errors.push(error.message));
