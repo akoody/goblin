@@ -4,16 +4,13 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { Menu, Search, X } from "lucide-react";
 import { createPortal } from "react-dom";
-import { logoutAction, updateCurrencyAction } from "@/app/actions";
-import { supportedCurrencies } from "@/lib/constants";
-import { getCurrencyLabel } from "@/lib/utils";
+import { logoutAction } from "@/app/actions";
 
 type MobileMenuProps = {
   admin?: boolean;
   user:
     | {
         name: string;
-        preferredCurrency: string;
         balanceLabel: string | null;
       }
     | null;
@@ -37,15 +34,16 @@ export function MobileMenu({ admin = false, user }: MobileMenuProps) {
 
   const navItems = admin
     ? [
-        { href: "/", label: "Библиотека" },
+        { href: "/?part=accounts", label: "Аккаунты" },
+        { href: "/?part=services", label: "Услуги" },
         { href: "/admin", label: "Админка" },
         { href: "/profile", label: "Профиль" },
       ]
     : user
       ? [
-          { href: "/", label: "Библиотека" },
+          { href: "/?part=accounts", label: "Аккаунты" },
+          { href: "/?part=services", label: "Услуги" },
           { href: "/profile", label: "Профиль" },
-          { href: "/projects", label: "Проекты" },
           { href: "/purchases", label: "Покупки" },
           { href: "/sales", label: "Продажи" },
           { href: "/chats", label: "Чаты" },
@@ -54,7 +52,8 @@ export function MobileMenu({ admin = false, user }: MobileMenuProps) {
           { href: "/settings", label: "Настройки" },
         ]
       : [
-          { href: "/", label: "Библиотека" },
+          { href: "/?part=accounts", label: "Аккаунты" },
+          { href: "/?part=services", label: "Услуги" },
           { href: "/support", label: "Поддержка" },
           { href: "/login", label: "Войти" },
           { href: "/register", label: "Регистрация" },
@@ -115,29 +114,6 @@ export function MobileMenu({ admin = false, user }: MobileMenuProps) {
                 ))}
               </nav>
 
-              {user ? (
-                <div className="mt-5 rounded-lg border border-slate-200 p-4">
-                  <div className="text-sm font-semibold  text-slate-400">Валюта</div>
-                  <div className="mt-3 flex flex-wrap gap-2">
-                    {supportedCurrencies.map((currency) => (
-                      <form key={currency.code} action={updateCurrencyAction}>
-                        <input type="hidden" name="currency" value={currency.code} />
-                        <input type="hidden" name="returnTo" value="/settings" />
-                        <button
-                          type="submit"
-                          className={`rounded-md px-3 py-2 text-sm font-semibold ${
-                            user.preferredCurrency === currency.code
-                              ? "bg-slate-950 text-white"
-                              : "bg-slate-100 text-slate-600"
-                          }`}
-                        >
-                          {getCurrencyLabel(currency.code)}
-                        </button>
-                      </form>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
 
               {user ? (
                 <form action={logoutAction} className="mt-5">

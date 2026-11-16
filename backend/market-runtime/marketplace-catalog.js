@@ -139,7 +139,7 @@ const familySections = {
     strategy: ["Аккаунты", "Валюта", "Предметы", "Буст", "Услуги", "Прочее"],
 };
 export function getSectionsForFamily(family) {
-    return familySections[family];
+    return familySections[family] ?? [];
 }
 export function slugify(value) {
     return value

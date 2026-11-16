@@ -3,16 +3,16 @@
 import { useActionState, useState } from "react";
 import { createProjectAction, type FormState } from "@/app/actions";
 import { SubmitButton } from "@/components/submit-button";
-import type { CurrencyCode, ProjectFormConfig, ProjectPlatform, ProjectServiceType } from "@/lib/db";
+import type { ProjectFormConfig, ProjectPlatform, ProjectServiceType } from "@/lib/db";
 
 const initialState: FormState = {};
 
 type CreateProjectFormProps = {
-  preferredCurrency: CurrencyCode;
   config: ProjectFormConfig;
+  requestKey: string;
 };
 
-export function CreateProjectForm({ preferredCurrency, config }: CreateProjectFormProps) {
+export function CreateProjectForm({ config, requestKey }: CreateProjectFormProps) {
   const [state, formAction] = useActionState(createProjectAction, initialState);
   const firstPlatform = config.platforms[0] ?? null;
   const [platform, setPlatform] = useState<ProjectPlatform>(firstPlatform?.id ?? "TELEGRAM");
@@ -31,6 +31,7 @@ export function CreateProjectForm({ preferredCurrency, config }: CreateProjectFo
 
   return (
     <form action={formAction} className="grid gap-5 lg:grid-cols-2">
+      <input type="hidden" name="requestKey" value={requestKey}/>
       <label className="flex flex-col gap-2 lg:col-span-2">
         <span className="text-sm font-medium text-slate-700">Название объявления</span>
         <input
@@ -133,29 +134,18 @@ export function CreateProjectForm({ preferredCurrency, config }: CreateProjectFo
       </label>
 
       <label className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-slate-700">Выплата за 1 цель</span>
+        <span className="text-sm font-medium text-slate-700">Выплата за 1 цель, USDT</span>
         <input
           name="rewardPerTarget"
           type="number"
-          min={1}
-          defaultValue={50}
+          min="0.000001"
+          step="0.000001"
+          placeholder="0.00"
           required
           className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3.5 text-base outline-none focus:border-slate-300"
         />
       </label>
 
-      <label className="flex flex-col gap-2">
-        <span className="text-sm font-medium text-slate-700">Валюта</span>
-        <select
-          name="currency"
-          defaultValue={preferredCurrency}
-          className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3.5 text-base outline-none focus:border-slate-300"
-        >
-          <option value="RUB">RUB</option>
-          <option value="USD">USD</option>
-          <option value="EUR">EUR</option>
-        </select>
-      </label>
 
       {state.error ? (
         <p className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-600 lg:col-span-2">

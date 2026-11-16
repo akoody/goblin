@@ -125,21 +125,21 @@ export const Me = () => {
       <div className={styles.profile_info}>
         <div className={styles.profile_info_left}>
           <div className={styles.profile_info_item}>
-            <h1 className="h1">{stats ? stats.recent : "—"}</h1>
+            <h1 className="h1">{stats ? stats.recent : "-"}</h1>
             <p className="p">Сделок за 30 дней</p>
           </div>
           <div className={styles.profile_info_item}>
-            <h1 className="h1">{stats ? stats.completed : "—"}</h1>
+            <h1 className="h1">{stats ? stats.completed : "-"}</h1>
             <p className="p">Всего завершено</p>
           </div>
         </div>{" "}
         <div className={styles.profile_info_left}>
           <div className={styles.profile_info_item}>
-            <h1 className="h1">{stats ? `${stats.successRate}%` : "—"}</h1>
+            <h1 className="h1">{stats ? `${stats.successRate}%` : "-"}</h1>
             <p className="p">Успешность завершённых сделок</p>
           </div>
           <div className={styles.profile_info_item}>
-            <h1 className="h1">{stats ? stats.cancelled : "—"}</h1>
+            <h1 className="h1">{stats ? stats.cancelled : "-"}</h1>
             <p className="p">Отменено сделок</p>
           </div>
         </div>
@@ -151,7 +151,7 @@ export const Me = () => {
             Способы оплаты
           </section>
           <section className="span">
-            <p>{paymentMethodCount ?? "—"}</p>
+            <p>{paymentMethodCount ?? "-"}</p>
             <p>
               <BiChevronRight />
             </p>

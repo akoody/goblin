@@ -1,0 +1,33 @@
+.panel {
+  display: grid;
+  gap: 16px;
+  padding: clamp(16px, 4vw, 32px);
+  border: 1px solid var(--border, #d6e0d8);
+  border-radius: 12px;
+  background: var(--surface-solid, white);
+
+  h2, h3, p, dl, dd { margin: 0; }
+  p { line-height: 1.5; }
+  header { display: grid; gap: 6px; }
+  [role='alert'] { color: var(--danger, #912728); }
+
+  label { display: grid; gap: 5px; }
+  input, select, button {
+    min-height: 42px;
+    max-width: 100%;
+    padding: 8px 12px;
+    font: inherit;
+    color: inherit;
+    border: 1px solid var(--border, #d6e0d8);
+    border-radius: 8px;
+    background: var(--surface-solid, white);
+  }
+  button { width: fit-content; cursor: pointer; }
+  button:disabled { opacity: .55; cursor: default; }
+  button.primary { background: #216341; color: white; }
+}
+.form { display: grid; gap: 12px; max-width: 480px; }
+.actions, .row, .balances { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; }
+.row, .balances { padding-block: 12px; border-block-start: 1px solid var(--border, #d6e0d8); }
+.row { align-items: center; }
+.balances dd { font-size: 1.2rem; font-weight: 700; }

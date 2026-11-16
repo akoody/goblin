@@ -7,6 +7,7 @@ export async function assertUserMarketArea(userId, section, executor = db) {
 }
 
 export function marketArea(section) {
+  if (section?.area==='accounts'||section?.area==='services') return section.area;
   return /^(аккаунт[ыа]?|accounts?)$/i.test(String(section?.name || '').trim()) ? 'accounts' : 'services';
 }
 

@@ -3,7 +3,8 @@ import { FiCheckCircle, FiSmartphone } from "react-icons/fi";
 import goblin from "../../assets/images/Гоблин 2.svg";
 import styles from "./Download.module.scss";
 
-const apkUrl = "/downloads/cryptogoblin-android-v1.0.0.apk";
+const apkVersion = "1.1.1";
+const apkUrl = `/downloads/cryptogoblin-android-v${apkVersion}.apk`;
 
 export const Download = () => (
   <main className={styles.download}>
@@ -19,7 +20,7 @@ export const Download = () => (
         <FaDownload />
         Скачать APK для Android
       </a>
-      <p className={styles.download_meta}>Версия 1.0 · Android 6.0 и новее · 5,6 МБ</p>
+      <p className={styles.download_meta}>Версия {apkVersion} · Android 6.0 и новее</p>
 
       <div className={styles.download_notice}>
         <FaShieldAlt />
@@ -31,7 +32,7 @@ export const Download = () => (
         <ol>
           <li><FiCheckCircle /> Нажмите «Скачать APK» и дождитесь загрузки.</li>
           <li><FiCheckCircle /> Откройте файл в уведомлении или папке «Загрузки».</li>
-          <li><FiCheckCircle /> Если Android спросит разрешение — подтвердите установку из браузера.</li>
+          <li><FiCheckCircle /> Android может запросить разрешение на установку APK из браузера. Если Xiaomi предложит проверить приложение, нажмите «Проверить».</li>
         </ol>
       </section>
 

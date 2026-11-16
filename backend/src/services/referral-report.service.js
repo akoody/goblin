@@ -32,9 +32,13 @@ export async function referralReport(query = {}) {
   try {
     await connection.beginTransaction();
     const [[count]] = await connection.query(`SELECT COUNT(*) AS total FROM users u ${where}`, params);
-    const [rows] = await connection.query(`SELECT u.id,u.username,u.email,u.referral_code AS code,
+    const [rows] = await connection.query(`SELECT u.id,u.username,u.email,u.status,u.referral_code AS code,
+      p.rate_percent AS defaultRatePercent,rr.rate_percent AS customRatePercent,
+      COALESCE(rr.rate_percent,p.rate_percent) AS effectiveRatePercent,
       (SELECT COUNT(*) FROM users i WHERE i.referred_by=u.id) AS invitedCount
-      FROM users u ${where} ORDER BY u.id DESC LIMIT 25 OFFSET ?`, [...params, (page - 1) * 25]);
+      FROM users u CROSS JOIN referral_commission_policy p
+      LEFT JOIN referral_user_rates rr ON rr.user_id=u.id ${where || 'WHERE 1=1'} AND p.id=1
+      ORDER BY u.id DESC LIMIT 25 OFFSET ?`, [...params, (page - 1) * 25]);
     let amounts = [];
     if (rows.length) {
       [amounts] = await connection.query(`SELECT i.referred_by AS referrerId,${depositColumns}

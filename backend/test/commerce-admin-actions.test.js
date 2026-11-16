@@ -1,4 +1,5 @@
 import test from "node:test";
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from "node:assert/strict";
 import { db } from "../src/config/db.js";
 import { actOnDeal, markEscrowMessagesRead, updateEscrowFeePolicy } from "../src/services/commerce.service.js";
@@ -88,6 +89,7 @@ function mockConnection(initialDeal) {
         state.readCursor = Math.max(state.readCursor, args[2]);
         return [{ affectedRows: 1 }];
       }
+      const referral=noReferrer(sql);if(referral)return referral;
       throw new Error(`Unexpected SQL in mock: ${sql}`);
     },
     async query(sql) {

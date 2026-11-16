@@ -11,6 +11,7 @@ export const confirmSaveClick = event => {
 };
 
 export const confirmSaveSubmit = event => {
+  if (event.target.dataset.saveConfirmation === 'handled') return;
   const button = event.nativeEvent.submitter;
   const label = button?.textContent || event.target.querySelector('button[type="submit"],button:not([type])')?.textContent;
   if (/сохранить/i.test(label || '') && !window.confirm('Сохранить изменения?')) {

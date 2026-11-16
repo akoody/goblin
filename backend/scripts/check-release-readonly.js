@@ -20,6 +20,15 @@ try{
   await get('/api/features');
   await get('/admin/transaction-history',null,401);
   const access=await get('/admin/access',token);assert.equal(access.role,'admin');
+  const referralPolicy=await get('/admin/referral-policy',token);
+  assert(Number(referralPolicy.ratePercent)>=0&&Number(referralPolicy.ratePercent)<=100);
+  const referralProfile=await get('/referrals/me',token);
+  assert.equal(referralProfile.accrualEnabled,true);assert(Array.isArray(referralProfile.rewardBalances));
+  await get('/admin/referral-policy',null,401);
+  for(const market of ['SPOT','FUTURES']){
+    const quote=await get('/exchange/market/BTC-USDT?market='+market);
+    assert.equal(quote.market,market);assert(Number(quote.price)>0);
+  }
   const inventory=await get(`/admin/wallet-users/${admin.id}/balances`,token);assert(inventory.wallets.some(w=>w.currency==='SOL'));
   const accounts=await get('/admin/users',token);assert(accounts.every(u=>typeof u.marketAccountsEnabled==='boolean'&&typeof u.marketServicesEnabled==='boolean'));
   for(const direction of ['','IN','OUT','INTERNAL']){
@@ -32,5 +41,5 @@ try{
   const [helpers]=await db.query('SELECT user_id FROM staff_helpers WHERE enabled=1');
   const normal=users.find(u=>!emails.includes(String(u.email).toLowerCase())&&!helpers.some(h=>Number(h.user_id)===Number(u.id)));
   if(normal)await get('/admin/transaction-history',signAccessToken({userId:normal.id,tokenVersion:Number(normal.token_version||0)}),403);
-  console.log(JSON.stringify({publicApi:true,adminHistory:true,filters:true,ownHistory:true,solBalances:true,marketAreaControls:true,anonymousDenied:true,ordinaryAccountDenied:Boolean(normal),mutatingRequests:0}));
+  console.log(JSON.stringify({publicApi:true,adminHistory:true,filters:true,ownHistory:true,solBalances:true,marketAreaControls:true,referralPolicy:true,referralAccrualConfigured:true,separateSpotFuturesQuotes:true,anonymousDenied:true,ordinaryAccountDenied:Boolean(normal),mutatingRequests:0}));
 }finally{await db.end();}

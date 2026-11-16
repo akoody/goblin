@@ -43,13 +43,13 @@ export function TransactionHistory({ admin = false, currencyFilter = 'ALL', dire
       <label>Статус<select aria-label="Статус" value={filters.status} onChange={e => field('status', e.target.value)}><option value="">Все</option>{Object.entries(statuses).map(([v, l]) => <option key={v} value={v}>{l}</option>)}</select></label>
       <button type="button" onClick={() => { setFilters(initial); setPage(1); }}>Сбросить</button>
     </div>
-    <p className={styles.note}>Даты указаны в вашем часовом поясе. Суммы — в валюте операции, без пересчёта в доллары.</p>
+    <p className={styles.note}>Даты указаны в вашем часовом поясе. Суммы - в валюте операции, без пересчёта в доллары.</p>
     {error && <p role="alert">{error}</p>}
     <div className={styles.table} tabIndex={0} role="region" aria-label={title} aria-busy={loading}>
       <table><thead><tr><th>ID / дата</th><th>Направление</th><th>Откуда</th><th>Куда</th><th>Сумма</th><th>Статус</th></tr></thead><tbody>
         {data?.rows.map(t => <tr key={t.id}>
           <td>{t.id}<time dateTime={t.createdAt}>{new Date(t.createdAt).toLocaleString('ru-RU')}</time></td>
-          <td>{directions[t.direction] || t.direction}</td><td>{t.senderAddress || '—'}</td><td>{t.receiverAddress || '—'}{t.txHash && <small>Хеш: {t.txHash}</small>}</td>
+          <td>{directions[t.direction] || t.direction}</td><td>{t.senderAddress || '-'}</td><td>{t.receiverAddress || '-'}{t.txHash && <small>Хеш: {t.txHash}</small>}</td>
           <td className={styles.amount}>{assetDecimal(t.amount)} {t.currency}</td><td>{statuses[t.status] || t.status}{Boolean(Number(t.amlNotChecked)) && <small>AML не выполнялся</small>}</td>
         </tr>)}
         {(loading || data?.rows.length === 0) && <tr><td colSpan={6}>{loading ? 'Загрузка…' : emptyText || 'По выбранным условиям транзакций нет'}</td></tr>}

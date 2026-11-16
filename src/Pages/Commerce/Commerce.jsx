@@ -20,7 +20,7 @@ const labels = {
   WAITING: "Ожидает участника",
   READY: "Ожидает резервирования",
   FUNDED: "Средства зарезервированы",
-  DELIVERED: "Передано — ожидает приёмки",
+  DELIVERED: "Передано - ожидает приёмки",
   DISPUTED: "Открыт спор",
   COMPLETED: "Завершена",
   REFUNDED: "Возврат",
@@ -576,13 +576,13 @@ export function Guarantor() {
         <div>
           <b>3. Передача</b>
           <p>
-            Покупатель подтверждает получение — продавец получает оплату. Споры
+            Покупатель подтверждает получение - продавец получает оплату. Споры
             решает администратор.
           </p>
         </div>
       </section>
       <aside className={styles.feeNotice} aria-live="polite">
-        <strong>Комиссия гаранта — {feePolicy.data ? `${feePolicy.data.feePercent}%` : "…"}</strong>
+        <strong>Комиссия гаранта - {feePolicy.data ? `${feePolicy.data.feePercent}%` : "…"}</strong>
         <p>Минимальная сумма: {feePolicy.data ? money(feePolicy.data.minimumAmount, "USDT") : "…"}. Комиссия удерживается из выплаты продавцу только после успешного завершения сделки. При возврате или отмене комиссия не взимается. Условия фиксируются при создании сделки.</p>
       </aside>
       {!token ? (
@@ -651,9 +651,12 @@ export function CommerceDeal({ admin = false }) {
     me = useData("/me"),
     mutation = useMutation();
   const [message, setMessage] = useState(""),
+    [attachment, setAttachment] = useState(null),
     [note, setNote] = useState(""),
     [copied, setCopied] = useState(false);
   const readMessageAttempts = useRef(new Set());
+  const attachmentInput=useRef(null);
+  const downloadingAttachment=useRef(false);
   const messagesRef = useRef(null);
   const followingMessages = useRef(true);
   const [newMessages, setNewMessages] = useState(false);
@@ -667,6 +670,8 @@ export function CommerceDeal({ admin = false }) {
   useEffect(() => {
     followingMessages.current = true;
     setNewMessages(false);
+    setAttachment(null);
+    if(attachmentInput.current)attachmentInput.current.value="";
   }, [id]);
   useEffect(() => {
     if (!lastMessageId) return;
@@ -717,12 +722,39 @@ export function CommerceDeal({ admin = false }) {
   const send = (e) => {
     e.preventDefault();
     mutation.run(async () => {
-      await api.post(prefix + `/deals/${id}/messages`, { text: message });
+      if(attachment){
+        const metadata=new TextEncoder().encode(JSON.stringify({name:attachment.name,caption:message}));
+        const length=new DataView(new ArrayBuffer(4));
+        length.setUint32(0,metadata.length);
+        await api.post(prefix+`/deals/${id}/attachments`,new Blob([length.buffer,metadata,attachment],{type:"application/octet-stream"}),
+          {headers:{"Content-Type":"application/octet-stream"}});
+        setAttachment(null);
+        if(attachmentInput.current)attachmentInput.current.value="";
+      }else await api.post(prefix + `/deals/${id}/messages`, { text: message });
       setMessage("");
       followingMessages.current = true;
       request.reload();
     });
   };
+  async function downloadAttachment(message){
+    if(downloadingAttachment.current)return;
+    downloadingAttachment.current=true;
+    try{
+      const {data}=await api.get(prefix+`/deals/${id}/attachments/${message.attachment_id}`,{responseType:"blob"});
+      const url=URL.createObjectURL(data);
+      const link=document.createElement("a");
+      link.href=url;
+      link.download=message.attachment_name;
+      document.body.append(link);
+      link.click();
+      link.remove();
+      window.setTimeout(()=>URL.revokeObjectURL(url),30_000);
+    }catch{
+      enqueueSnackbar("Не удалось скачать вложение",{variant:"error"});
+    }finally{
+      downloadingAttachment.current=false;
+    }
+  }
   return (
     <Shell
       title={d?.title || "Сделка"}
@@ -786,7 +818,7 @@ export function CommerceDeal({ admin = false }) {
                   })
                 }
               >
-                Принимаю условия — присоединиться
+                Принимаю условия - присоединиться
               </button>
             ) : (
               <>
@@ -929,7 +961,10 @@ export function CommerceDeal({ admin = false }) {
                     <article className={`${styles.message} ${String(m.sender_id) === String(user) ? styles.ownMessage : ''}`} key={m.id}>
                       <ChatProfile profile={m.sender||{username:m.sender_name}}/>
                       <small>{date(m.created_at)}</small>
-                      <p>{m.text}</p>
+                      {m.text&&<p>{m.text}</p>}
+                      {m.attachment_id&&<button type="button" className={styles.attachmentDownload} onClick={()=>downloadAttachment(m)}>
+                        Скачать {m.attachment_name} · {new Intl.NumberFormat("ru-RU",{maximumFractionDigits:1}).format(Math.max(0.1,Number(m.attachment_size)/1024))} КБ
+                      </button>}
                     </article>
                   ))}
                   {!request.data.messages.length && (
@@ -947,17 +982,32 @@ export function CommerceDeal({ admin = false }) {
                         maxLength={2000}
                         rows={3}
                         placeholder="Напишите сообщение…"
-                        onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if (message.trim() && !mutation.busy) e.currentTarget.form.requestSubmit(); } }}
-                        required
+                        onKeyDown={e => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); if ((attachment||message.trim()) && !mutation.busy) e.currentTarget.form.requestSubmit(); } }}
+                        required={!attachment}
                       />
                     </label>
+                    {d.kind==="ESCROW"&&<label className={styles.attachmentPicker}>
+                      Файл, фото или видео до 20 МБ
+                      <input ref={attachmentInput} type="file" disabled={mutation.busy} onChange={event=>{
+                        const file=event.target.files?.[0];
+                        if(file&&(!file.size||file.size>20_000_000)){
+                          event.target.value="";
+                          setAttachment(null);
+                          enqueueSnackbar("Выберите непустой файл размером до 20 МБ",{variant:"error"});
+                          return;
+                        }
+                        setAttachment(file||null);
+                      }}/>
+                    </label>}
+                    {attachment&&<button type="button" disabled={mutation.busy} className={styles.attachmentDownload}
+                      onClick={()=>{setAttachment(null);if(attachmentInput.current)attachmentInput.current.value="";}}>Убрать вложение</button>}
                     <button
                       className={styles.primary}
-                      disabled={mutation.busy || !message.trim()}
+                      disabled={mutation.busy || (!attachment&&!message.trim())}
                     >
-                      {mutation.busy ? 'Отправка…' : 'Отправить'}
+                      {mutation.busy ? attachment?'Проверка файла…':'Отправка…' : 'Отправить'}
                     </button>
-                    <span className={styles.chatNote}>{message.length}/2000 · Ctrl/⌘ + Enter — отправить</span>
+                    <span className={styles.chatNote}>{message.length}/2000 · Ctrl/⌘ + Enter - отправить</span>
                   </form>
                 )}
               </>
@@ -1100,7 +1150,7 @@ export function CommerceAdmin() {
               <div>
                 <strong>{d.title}</strong>
                 <small>
-                  {d.buyer_name || "—"} → {d.seller_name || "—"}
+                  {d.buyer_name || "-"} → {d.seller_name || "-"}
                 </small>
               </div>
               <div>

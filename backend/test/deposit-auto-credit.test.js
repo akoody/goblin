@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from 'node:assert/strict';
 import { db } from '../src/config/db.js';
 import { autoApproveDeposit } from '../src/services/deposit-compliance.service.js';
@@ -10,6 +11,7 @@ test('Automatic settlement credits net and treasury exactly once; all other AML 
   const clean=()=>({status:'completed',result:{product:'screen',subject:{type:'address',value:'Tsender',network:'tron',asset:'USDT'},risk_level:'low',decision:'allow',coverage_status:'complete'}});
   db.execute=async()=>[[{currency:'USDT'}]];
   db.getConnection=async()=>({beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release(){},execute:async(sql,args)=>{
+    const referral=noReferrer(sql);if(referral)return referral;
     if(sql.includes('SELECT d.*'))return [[{...deposit,status}]];
     if(sql.includes('SELECT status,result_json'))return [[{status:'completed',check_id:'test-check',result_json:report}]];
     if(sql.includes('SELECT w.*'))return [[{id:3,user_id:7,status:'active',user_status:'active',deposits_enabled:1}]];

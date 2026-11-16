@@ -5,9 +5,10 @@ import {Admin} from './Admin';
 import {TransactionHistory} from '../../Components/TransactionHistory/TransactionHistory';
 import {UserBalanceSearch} from './UserBalances';
 import {Referrals} from './Referrals';
+import {ContentAdmin} from '../Content/Content';
 import styles from './Admin.module.scss';
 
-const labels={chat:'Чаты',security:'Безопасность',p2p:'P2P-сделки',transactions:'Транзакции биржи',referrals:'Приглашения',balances:'Балансы пользователей'};
+const labels={chat:'Чаты',security:'Безопасность',p2p:'P2P-сделки',transactions:'Транзакции биржи',referrals:'Приглашения',balances:'Балансы пользователей',content:'Новости и о проекте'};
 const message=e=>e.response?.data?.message||'Не удалось выполнить запрос';
 function Chat({ticket}){
   const [messages,setMessages]=useState([]),[text,setText]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -26,7 +27,7 @@ function HelperSection({section}){
     const path={chat:'/support/tickets',security:'/admin/login-ips',p2p:'/deal/admin/all',transactions:'/admin/transactions'}[section];
     api.get(path,{params:section==='security'?{q:query}:undefined}).then(r=>{if(alive)setData(r.data);}).catch(e=>{if(alive){setData(null);setError(message(e));}});
   };load();const timer=setInterval(load,15000);return()=>{alive=false;clearInterval(timer);};},[section,query,refresh]);
-  if(section==='referrals')return <Referrals/>;
+  if(section==='referrals')return <Referrals readOnly/>;
   if(section==='transactions')return <TransactionHistory admin title="Транзакции биржи"/>;
   if(section==='balances')return <UserBalanceSearch/>;
   async function review(id){try{await api.patch(`/admin/login-ips/${id}/review`);setRefresh(v=>v+1);}catch(e){setError(message(e));}}
@@ -44,5 +45,5 @@ export function StaffPanel(){
   if(!access)return <main className={styles.admin}>Проверяем права…</main>;
   if(access.role==='admin')return <Admin/>;
   if(access.role!=='helper')return <Navigate to="/" replace/>;
-  return <main className={styles.admin}><h1>Панель хелпера</h1><nav className={styles.admin_tabs} aria-label="Разделы хелпера">{access.permissions.map(p=><button key={p} aria-pressed={section===p} onClick={()=>setSection(p)}>{labels[p]}</button>)}</nav>{section?<HelperSection key={section} section={section}/>:<p>Администратор пока не выдал права на разделы.</p>}</main>;
+  return <main className={styles.admin}><h1>Панель хелпера</h1><nav className={styles.admin_tabs} aria-label="Разделы хелпера">{access.permissions.map(p=><button key={p} aria-pressed={section===p} onClick={()=>setSection(p)}>{labels[p]}</button>)}</nav>{section==='content'?<ContentAdmin/>:section?<HelperSection key={section} section={section}/>:<p>Администратор пока не выдал права на разделы.</p>}</main>;
 }

@@ -11,7 +11,6 @@ type CreateListingFormProps = {
   itemName: string;
   sectionId: string;
   sectionName: string;
-  preferredCurrency: "RUB" | "USD" | "EUR";
 };
 
 export function CreateListingForm({
@@ -19,7 +18,6 @@ export function CreateListingForm({
   itemName,
   sectionId,
   sectionName,
-  preferredCurrency,
 }: CreateListingFormProps) {
   const [state, formAction] = useActionState(createListingAction, initialState);
 
@@ -75,29 +73,18 @@ export function CreateListingForm({
         </label>
 
         <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-slate-700">Цена за 1 шт.</span>
+          <span className="text-sm font-medium text-slate-700">Цена за 1 шт., USDT</span>
           <input
             name="price"
             type="number"
-            min={1}
+            min="0.000001"
+            step="0.000001"
             required
-            defaultValue={10}
+            placeholder="0.00"
             className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3.5 text-base outline-none focus:border-slate-300"
           />
         </label>
 
-        <label className="flex flex-col gap-2">
-          <span className="text-sm font-medium text-slate-700">Валюта</span>
-          <select
-            name="currency"
-            defaultValue={preferredCurrency}
-            className="rounded-lg border border-slate-200 bg-slate-50 px-4 py-3.5 text-base outline-none focus:border-slate-300"
-          >
-            <option value="RUB">RUB</option>
-            <option value="USD">USD</option>
-            <option value="EUR">EUR</option>
-          </select>
-        </label>
 
         <label className="flex flex-col gap-2">
           <span className="text-sm font-medium text-slate-700">Наличие</span>

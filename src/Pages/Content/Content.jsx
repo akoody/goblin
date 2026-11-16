@@ -4,9 +4,9 @@ import api from '../../api';
 import styles from './Content.module.scss';
 import {NewsMedia,NewsMediaEditor} from './NewsMedia';
 export function News(){
- const [params]=useSearchParams(),category=params.get('category')==='crypto'?'crypto':'project';
+ const [params]=useSearchParams(),category=params.get('category')==='crypto'?'crypto':'project',article=params.get('article');
  const [rows,setRows]=useState(null),[error,setError]=useState('');
- useEffect(()=>{const controller=new AbortController();setRows(null);setError('');api.get('/api/content/news',{params:{category},signal:controller.signal}).then(r=>setRows(r.data)).catch(()=>{if(!controller.signal.aborted)setError('Не удалось загрузить новости');});return()=>controller.abort();},[category]);
+ useEffect(()=>{const controller=new AbortController();setRows(null);setError('');api.get('/api/content/news',{params:{category,article},signal:controller.signal}).then(r=>setRows(r.data)).catch(()=>{if(!controller.signal.aborted)setError('Не удалось загрузить новости');});return()=>controller.abort();},[category,article]);
  return <main className={styles.page}><h1>Новости</h1><nav className={styles.tabs} aria-label="Категории новостей"><Link to="/news" aria-current={category==='project'?'page':undefined}>Новости проекта</Link><Link to="/news?category=crypto" aria-current={category==='crypto'?'page':undefined}>Крипто новости</Link></nav>{error&&<p role="alert">{error}</p>}{!rows&&!error&&<p>Загрузка…</p>}{rows?.length===0&&<p>В этой категории пока нет публикаций.</p>}{rows?.map(n=><article key={n.id} className={styles.article}><time dateTime={n.created_at}>{new Date(n.created_at).toLocaleDateString('ru-RU')}</time><h2>{n.title}</h2><p className={styles.body}>{n.body}</p><NewsMedia files={n.media}/></article>)}</main>;
 }
 export function About(){const [data,setData]=useState(null),[error,setError]=useState('');useEffect(()=>{api.get('/api/content/about').then(r=>setData(r.data)).catch(()=>setError('Не удалось загрузить информацию'));},[]);return <main className={styles.page}><h1>О проекте</h1>{error&&<p role="alert">{error}</p>}<p className={styles.body}>{data?.body}</p><div className={styles.links}>{data?.links.map((l,i)=><a key={i} href={l.url} target="_blank" rel="noopener noreferrer">{l.label} ↗</a>)}</div></main>;}

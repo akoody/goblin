@@ -33,7 +33,10 @@ export default async function HomePage({ searchParams }: HomePageProps) {
   const allItems = await getCatalogLibrary(query);
   const part = resolvedSearchParams.part ? selectedMarketArea(resolvedSearchParams.part) : allItems.some(item=>item.sectionStats.some(section=>marketArea(section)==='accounts'))?'accounts':'services';
   const library = allItems.map(item => ({...item,sectionStats:item.sectionStats.filter(section => marketArea(section) === part)})).filter(item => item.sectionStats.length);
-  const grouped = groupByLetter(library);
+  const popular=query?[]:[...library].filter(item=>(item.visitCounts?.[part]||0)>0)
+    .sort((a,b)=>(b.visitCounts?.[part]||0)-(a.visitCounts?.[part]||0)||a.name.localeCompare(b.name,'ru')).slice(0,3);
+  const popularIds=new Set(popular.map(item=>item.id));
+  const grouped = groupByLetter(library.filter(item=>!popularIds.has(item.id)).sort((a,b)=>a.name.localeCompare(b.name,'ru')));
 
   return (
     <section className="min-w-0 bg-transparent sm:rounded-lg sm:border sm:border-slate-200 sm:bg-white/92 sm:p-8 sm:shadow-sm sm:shadow-slate-200/60">
@@ -55,7 +58,11 @@ export default async function HomePage({ searchParams }: HomePageProps) {
         <div className="text-sm text-slate-500">{library.length} найденных разделов</div>
       </div>
 
-      {!library.length&&<p role="status" className="py-6 text-sm text-slate-600">Нет доступных категорий по выбранным условиям. Попробуйте другой раздел или измените поиск.</p>}
+      {!library.length&&<p role="status" className="py-6 text-sm text-slate-600">{!query&&!allItems.length?'Каталог пока пуст. Категории добавляет администратор.':'Нет доступных категорий по выбранным условиям. Попробуйте другой раздел или измените поиск.'}</p>}
+      {popular.length>0&&<section aria-label="Популярные категории" className="mb-6 border-b border-slate-200 pb-6">
+        <h2 className="mb-3 text-lg font-semibold text-slate-950">Популярные категории</h2>
+        <div className="grid gap-3 sm:grid-cols-3">{popular.map(item=><Link key={item.id} href={`/catalog/${item.slug}?part=${part}`} className="min-w-0 rounded-md border border-slate-200 px-4 py-3 font-semibold text-green-800 [overflow-wrap:anywhere] hover:border-green-700">{item.name}</Link>)}</div>
+      </section>}
 
       <div className="grid min-w-0 gap-5 xl:grid-cols-[96px_1fr] xl:gap-8">
         <div className="hidden xl:block">
@@ -104,7 +111,7 @@ export default async function HomePage({ searchParams }: HomePageProps) {
                     <div className="min-w-0 p-4 sm:p-5">
                       <div className="truncate text-base font-semibold text-slate-950 sm:text-lg">{item.name}</div>
                       <div className="mt-1 text-sm text-slate-500">
-                        {catalogKindLabels[item.kind]} · {item.sectionStats.reduce((total,section)=>total+section.listingsCount,0)} предложений
+                        {catalogKindLabels[item.kind]??item.kind} · {item.sectionStats.reduce((total,section)=>total+section.listingsCount,0)} предложений
                       </div>
                       <div className="mt-3 line-clamp-2 text-sm leading-6 text-slate-500">{item.description}</div>
                       <div className="mt-4 flex max-w-full flex-wrap gap-2 overflow-hidden">

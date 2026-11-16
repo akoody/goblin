@@ -7,8 +7,9 @@ import { isAdminUser } from "@/lib/admin";
 import { catalogKindLabels } from "@/lib/constants";
 import { getCatalogItemBySlug } from "@/lib/db";
 import { getCatalogSectionPath, getListingPath, getSellSectionPath } from "@/lib/routes";
-import { formatCurrency, formatDeliveryType, getInitials } from "@/lib/utils";
+import { formatMarketPrice, formatDeliveryType, getInitials } from "@/lib/utils";
 import {marketArea, selectedMarketArea} from '@/lib/market-area';
+import {CatalogVisit} from '@/components/catalog-visit';
 
 type CatalogPageProps = {
   params: Promise<{ slug: string }>;
@@ -46,6 +47,7 @@ export default async function CatalogItemPage({ params, searchParams }: CatalogP
 
   return (
     <div className="grid min-w-0 gap-5 xl:grid-cols-[1.08fr_0.92fr] xl:gap-6">
+      <CatalogVisit slug={slug} area={part}/>
       <section className="min-w-0 space-y-5 xl:space-y-6">
         <div className="min-w-0 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/60 sm:rounded-lg">
           <div
@@ -61,7 +63,7 @@ export default async function CatalogItemPage({ params, searchParams }: CatalogP
                 Назад к библиотеке
               </Link>
               <div className="mt-5 inline-flex rounded-md bg-slate-100 px-3 py-1 text-xs font-semibold  text-slate-500">
-                {catalogKindLabels[details.kind]}
+                {catalogKindLabels[details.kind]??details.kind}
               </div>
               <h1 className="mt-4 font-(family-name:--font-space-grotesk) text-3xl font-bold text-slate-950 sm:text-3xl">
                 {details.name}
@@ -197,7 +199,7 @@ export default async function CatalogItemPage({ params, searchParams }: CatalogP
                 </div>
                 <div className="flex items-end justify-between gap-3 sm:block sm:text-right">
                   <div className="text-xl font-semibold text-slate-950 sm:text-2xl">
-                    {formatCurrency(listing.priceRub, user?.preferredCurrency ?? "RUB")}
+                    {formatMarketPrice(listing.priceUsdt)}
                   </div>
                   <div className="mt-1 text-sm text-slate-500">{formatDeliveryType(listing.deliveryType)}</div>
                 </div>

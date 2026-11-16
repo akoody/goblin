@@ -1,5 +1,5 @@
 import express from "express";
-import { loginUser, registerUserWithReferral } from "../services/auth.service.js";
+import { completeLogin, loginUser, registerUserWithReferral } from "../services/auth.service.js";
 import { confirmPasswordReset, requestPasswordReset } from "../services/password-reset.service.js";
 import { createRateLimit } from "../middleware/rate-limit.js";
 import { setMarketCookie } from '../services/market-session.service.js';
@@ -12,20 +12,27 @@ const resetConfirmLimit = createRateLimit({ windowMs: 15 * 60 * 1000, max: 10, m
 const registrationLimit = createRateLimit({ windowMs: 60 * 60 * 1000, max: 5, message: "Слишком много попыток регистрации. Попробуйте позже." });
 
 router.post("/login", loginLimit, async (req, res) => {
-
-
-    const { username, password } = req.body;
-
-    if (!username || !password) return res.status(400).json({ message: 'Username and password required' });
-
+    const {username,password,challenge,code,deviceModel}=req.body??{};
+    res.set("Cache-Control","no-store");
+    const context={ip:req.ip,userAgent:req.get("user-agent"),deviceModel};
     try {
-        const token = await loginUser(username, password, { ip: req.ip, userAgent: req.get("user-agent"), deviceModel: req.body?.deviceModel });
-        setMarketCookie(res,token,verifyAccessToken(token).exp,req.secure);
-        res.json({ success: true, access_token: token });
-    } catch (e) {
-        if (e.message === "Invalid credentials") return res.status(401).json({ success: false, message: e.message });
-        console.error("Login failed:", e.message);
-        res.status(503).json({ success: false, message: "Вход временно недоступен. Попробуйте позже." });
+        let result;
+        if(challenge!==undefined){
+            result=await completeLogin(challenge,code,context);
+        }else{
+            if(typeof username!=="string"||!username.trim()||username.length>254||
+               typeof password!=="string"||!password){
+                return res.status(400).json({message:"Введите логин или email и пароль."});
+            }
+            result=await loginUser(username.trim(),password,context);
+        }
+        if(result.challenge)return res.status(202).json({requiresAuthenticator:true,challenge:result.challenge});
+        setMarketCookie(res,result.token,verifyAccessToken(result.token).exp,req.secure);
+        return res.json({success:true,access_token:result.token});
+    }catch(error){
+        if(error.status)return res.status(error.status).json({success:false,code:error.code,message:error.message});
+        console.error("Login failed",error.code||error.name);
+        return res.status(503).json({success:false,message:"Вход временно недоступен. Попробуйте позже."});
     }
 });
 

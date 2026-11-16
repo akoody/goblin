@@ -1,7 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
-import { currencyRates, supportedCurrencies } from "@/lib/constants";
 import type {
-  CurrencyCode,
   ListingDeliveryType,
   OrderStatus,
   ProjectPlatform,
@@ -17,39 +15,17 @@ export function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-export function convertRubToCurrency(valueRub: number, currency: CurrencyCode) {
-  if (currency === "RUB") {
-    return valueRub;
-  }
-
-  return valueRub / currencyRates[currency];
+export function formatUsdt(value: string, quantity = 1) {
+  const [whole, fraction = ""] = value.replace(/^-/, "").split(".");
+  const scale = BigInt(1_000_000);
+  const units = (BigInt(whole) * scale + BigInt(fraction.padEnd(6, "0"))) * BigInt(quantity);
+  const decimals = String(units % scale).padStart(6, "0").replace(/0+$/, "");
+  const integer = new Intl.NumberFormat("ru-RU").format(units / scale);
+  return `${value.startsWith("-") ? "-" : ""}${integer}${decimals ? "," + decimals : ""} USDT`;
 }
 
-export function convertCurrencyToRub(value: number, currency: CurrencyCode) {
-  if (currency === "RUB") {
-    return value;
-  }
-
-  return Math.round(value * currencyRates[currency]);
-}
-
-export function formatCurrency(valueRub: number, currency: CurrencyCode = "RUB") {
-  const value = convertRubToCurrency(valueRub, currency);
-
-  return new Intl.NumberFormat("ru-RU", {
-    style: "currency",
-    currency,
-    maximumFractionDigits: 2,
-  }).format(value);
-}
-
-export function formatSignedCurrency(valueRub: number, currency: CurrencyCode = "RUB") {
-  const formatted = formatCurrency(Math.abs(valueRub), currency);
-  return `${valueRub >= 0 ? "+" : "-"} ${formatted}`;
-}
-
-export function getCurrencyLabel(code: CurrencyCode) {
-  return supportedCurrencies.find((currency) => currency.code === code)?.label ?? code;
+export function formatMarketPrice(usdt?: string) {
+  return usdt === undefined ? "Цена недоступна" : formatUsdt(usdt);
 }
 
 export function formatDate(value: Date) {

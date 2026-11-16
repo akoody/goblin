@@ -1,4 +1,5 @@
 import express from "express";
+import {treasuryPayoutOverview,savePayoutPolicy,previewTreasuryPayout,executeTreasuryPayout,recheckTreasuryPayout} from '../services/treasury-payout.service.js';
 import {transactionHistory} from '../services/transaction-history.service.js';
 import {updateUserControls} from '../services/user-controls.service.js';
 import {nativeOverview,saveNativePolicy,createNativeVaults,previewNativeCollection,executeNativePlan,recheckNativeJob} from '../services/native-chain.service.js';
@@ -8,6 +9,7 @@ import {previewCollection,queueCollection,cancelCollectionJob,recheckCollectionJ
 import {findWalletUsers,staffWalletBalances} from '../services/staff-wallets.service.js';
 import { staffAccess,helperRoutePermission,listHelpers,saveHelper } from '../services/staff-access.service.js';
 import { referralReport, referralInvitees, issueReferralLink } from '../services/referral-report.service.js';
+import {referralCommissionPolicy,saveReferralDefault,saveReferralUserRates} from '../services/referral-commission-policy.service.js';
 import { describeLoginDevice } from "../services/login-device.service.js";
 import { loginIpSearch } from '../services/login-ip-search.js';
 import { depositComplianceOverview, updateDepositFee, reviewDeposit } from '../services/deposit-compliance.service.js';
@@ -46,6 +48,11 @@ const depositHandler=fn=>async(req,res)=>{
 router.get('/wallet-users',depositHandler(req=>findWalletUsers(req.query.q)));
 router.get('/wallet-users/:id/balances',depositHandler(req=>staffWalletBalances(req.params.id)));
 router.get('/deposit-compliance',depositHandler(()=>depositComplianceOverview()));
+router.get('/treasury',depositHandler(()=>treasuryPayoutOverview()));
+router.patch('/treasury/:currency/policy',depositHandler(req=>savePayoutPolicy(req.user.userId,req.params.currency,req.body)));
+router.post('/treasury/:currency/preview',depositHandler(req=>previewTreasuryPayout(req.params.currency,req.user.userId,req.body)));
+router.post('/treasury/payouts/:id/execute',depositHandler(req=>executeTreasuryPayout(req.params.id,req.user.userId)));
+router.post('/treasury/payouts/:id/recheck',depositHandler(req=>recheckTreasuryPayout(req.params.id)));
 router.get('/treasury-auto-withdrawal-policy',depositHandler(()=>getTreasuryAutoWithdrawalPolicy()));
 router.get('/treasury-collection',depositHandler(()=>collectionOverview()));
 router.get('/native-chains',depositHandler(()=>nativeOverview()));
@@ -71,6 +78,9 @@ const referralHandler = fn => async (req, res) => {
   }
 };
 router.get('/referrals',referralHandler(req=>referralReport(req.query)));
+router.get('/referral-policy',referralHandler(()=>referralCommissionPolicy()));
+router.patch('/referral-policy',referralHandler(req=>saveReferralDefault(req.user.userId,req.body)));
+router.patch('/referral-rates',referralHandler(req=>saveReferralUserRates(req.user.userId,req.body)));
 router.get('/referrals/:id/invitees',referralHandler(req=>referralInvitees(req.params.id,req.query)));
 router.post('/referrals/:id/link',referralHandler(req=>issueReferralLink(req.params.id)));
 router.patch('/deposit-compliance/policy',depositHandler(req=>updateDepositFee(req.user.userId,req.body.feeUsd)));
@@ -133,6 +143,7 @@ router.patch("/features/:feature", async (req, res) => {
     }
     res.json(await updatePlatformFeature(feature, req.body.enabled));
   } catch (error) {
+    if(error.status===409)return res.status(409).json({message:error.message});
     console.error("PATCH /admin/features error:", error);
     res.status(500).json({ message: "Failed to update platform feature" });
   }

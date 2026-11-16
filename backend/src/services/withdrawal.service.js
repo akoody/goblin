@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import {notifyUsers} from './push.service.js';
 import Decimal from "decimal.js";
 
 import { db } from "../config/db.js";
@@ -56,6 +57,7 @@ const releaseReservation = async (withdrawal, status, errorMessage = null) => {
       [status, errorMessage, withdrawal.id]
     );
     await connection.commit();
+    notifyUsers('withdrawal_failed',[withdrawal.user_id],{key:`tron:${withdrawal.id}:failed`});
   } catch (error) {
     await connection.rollback();
     throw error;
@@ -211,7 +213,7 @@ export async function createTronWithdrawal({ userId, currency, toAddress, amount
 
 export async function reconcileTronWithdrawals(getReceipt) {
   const [withdrawals] = await db.query(
-    `SELECT id, wallet_id, amount, status, tx_hash, signed_transaction, broadcast_at, updated_at
+    `SELECT id, user_id, wallet_id, amount, status, tx_hash, signed_transaction, broadcast_at, updated_at
      FROM crypto_withdrawals
      WHERE network = 'TRON' AND status = 'broadcast' AND tx_hash IS NOT NULL
      ORDER BY updated_at ASC
@@ -247,10 +249,11 @@ export async function reconcileTronWithdrawals(getReceipt) {
       const executionResult = receipt.receipt?.result || receipt.result;
       const success = !executionResult || executionResult === "SUCCESS";
       if (success) {
-        await db.execute(
+        const [updated]=await db.execute(
           "UPDATE crypto_withdrawals SET status = 'confirmed', fee_charged = ?, confirmed_at = NOW() WHERE id = ? AND status = 'broadcast'",
           [new Decimal(String(receipt.fee || 0)).div(1_000_000).toFixed(6), withdrawal.id]
         );
+        if(updated.affectedRows===1)notifyUsers('withdrawal_confirmed',[withdrawal.user_id],{key:`tron:${withdrawal.id}:confirmed`});
         continue;
       }
       const connection = await db.getConnection();
@@ -268,6 +271,7 @@ export async function reconcileTronWithdrawals(getReceipt) {
           );
         }
         await connection.commit();
+        if(rows[0]?.status==='broadcast')notifyUsers('withdrawal_failed',[withdrawal.user_id],{key:`tron:${withdrawal.id}:failed`});
       } catch (error) {
         await connection.rollback();
         throw error;

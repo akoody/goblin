@@ -14,6 +14,8 @@ import { getApiErrorMessage } from "../../utils/notifications";
 export const Login = () => {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [challenge,setChallenge] = useState("");
+  const [code,setCode] = useState("");
   const [loading, setLoading] = useState(false);
   const [validationAttempted, setValidationAttempted] = useState(false);
   const navigate = useNavigate();
@@ -42,32 +44,33 @@ export const Login = () => {
     e.preventDefault();
 
     setLoading(true);
-    let deviceModel = "";
     try {
-      if (navigator.userAgentData?.getHighEntropyValues) {
-        const hints = await Promise.race([
-          navigator.userAgentData.getHighEntropyValues(["model"]),
-          new Promise((resolve) => window.setTimeout(() => resolve({}), 500)),
-        ]);
-        deviceModel = hints.model || "";
+      let deviceModel = "";
+      if (!challenge&&navigator.userAgentData?.getHighEntropyValues) {
+        try {
+          const hints=await Promise.race([
+            navigator.userAgentData.getHighEntropyValues(["model"]),
+            new Promise(resolve=>window.setTimeout(()=>resolve({}),500)),
+          ]);
+          deviceModel=hints.model||"";
+        }catch { /* Device hints are optional. */ }
       }
-    } catch { /* Device hints are optional; sign-in must still work. */ }
-    api
-      .post("/auth/login", { username, password, deviceModel })
-      .then((response) => {
-        const token = response.data.access_token;
-        localStorage.setItem("token", token);
-        const redirectTo = location.state?.from?.pathname || "/me";
-        navigate(redirectTo, { replace: true });
-      })
-      .catch((error) => {
-        console.error(error);
-        enqueueSnackbar(getApiErrorMessage(error, "Ошибка входа"), {
-          variant: "error",
-          autoHideDuration: 4200,
-        });
-      })
-      .finally(() => setLoading(false));
+      const {data}=await api.post("/auth/login",challenge?{challenge,code}:{username,password,deviceModel});
+      if(data.requiresAuthenticator&&data.challenge){
+        setChallenge(data.challenge);
+        setPassword("");
+        return;
+      }
+      if(typeof data.access_token!=="string"||!data.access_token)throw new Error("Invalid login response");
+      localStorage.setItem("token",data.access_token);
+      navigate(location.state?.from?.pathname||"/me",{replace:true});
+    }catch(error){
+      if(error.response?.data?.code==="MFA_EXPIRED")setChallenge("");
+      setCode("");
+      enqueueSnackbar(getApiErrorMessage(error,"Ошибка входа"),{variant:"error",autoHideDuration:4200});
+    }finally{
+      setLoading(false);
+    }
   };
 
   return (
@@ -103,13 +106,15 @@ export const Login = () => {
         <div className={styles.loginTitleBlock}>
           <p>С возвращением</p>
           <h1 className="header-30">Вход</h1>
-          <span>Введите данные аккаунта, чтобы продолжить работу.</span>
+          <span>{challenge?"Введите код из Authenticator или резервный код.":"Введите данные аккаунта, чтобы продолжить работу."}</span>
         </div>
         <form
           onSubmit={handleSubmit}
           onInvalidCapture={() => setValidationAttempted(true)}
           className={`${styles.loginForm} ${validationAttempted ? styles.loginFormInvalid : ""}`}
         >
+          {challenge?<Input onChange={setCode} value={code} name="code" autoComplete="one-time-code" maxLength={40}
+            placeholder={<p><CiLock/>Код Authenticator или резервный код</p>}/>:<>
           <Input
             onChange={(value) => setUsername(value)}
             value={username}
@@ -136,13 +141,14 @@ export const Login = () => {
           <Link to="/reset-pass" className="link">
             Забыли пароль?
           </Link>
+          </>}
           <button type="submit" className="green-button" disabled={loading}>
-            {loading ? <><FiLoader className={styles.spinner} aria-hidden="true" /> Входим...</> : "Войти"}
+            {loading ? <><FiLoader className={styles.spinner} aria-hidden="true" /> Входим...</> : challenge?"Подтвердить вход":"Войти"}
             {!loading && <FiArrowRight />}
           </button>
-          <Link to="/signin" className="link">
+          {challenge?<button type="button" className="link" disabled={loading} onClick={()=>{setChallenge("");setCode("");}}>Вернуться к паролю</button>:<Link to="/signin" className="link">
             Нет аккаунта? <u>Зарегистрироваться</u>
-          </Link>
+          </Link>}
           <Link to="/">Посмотреть сайт без регистрации</Link>
         </form>
       </section>

@@ -1,17 +1,6 @@
-export type CatalogKind = "GAME" | "SERVICE" | "PLATFORM";
+export type CatalogKind = string;
 
-export type CatalogFamily =
-  | "ai"
-  | "subscription"
-  | "software"
-  | "platform"
-  | "social"
-  | "shooter"
-  | "mmorpg"
-  | "mobile"
-  | "sports"
-  | "sandbox"
-  | "strategy";
+export type CatalogFamily = string;
 
 export type CatalogBlueprint = {
   name: string;
@@ -211,7 +200,7 @@ const familySections: Record<CatalogFamily, string[]> = {
 };
 
 export function getSectionsForFamily(family: CatalogFamily) {
-  return familySections[family];
+  return familySections[family] ?? [];
 }
 
 export function slugify(value: string) {

@@ -24,7 +24,9 @@ api.interceptors.response.use(
   (error) => {
     const requestUrl = String(error.config?.url || "");
     const isLoginRequest = /(^|\/)auth\/login(?:\?|$)/.test(requestUrl);
-    if (error.response?.status === 401 && !isLoginRequest) {
+    const sentToken=error.config?.headers?.Authorization;
+    const currentToken=localStorage.getItem("token");
+    if (error.response?.status === 401 && !isLoginRequest && (!sentToken||sentToken===`Bearer ${currentToken}`)) {
       localStorage.removeItem("token");
       if (!["/login", "/signin", "/reset-pass"].includes(window.location.pathname)) {
         window.location.assign("/login?reason=session-expired");

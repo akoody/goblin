@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { ChevronDown, Search } from "lucide-react";
 import { unstable_noStore as noStore } from "next/cache";
-import { logoutAction, updateCurrencyAction } from "@/app/actions";
+import { logoutAction } from "@/app/actions";
 import { MobileBottomNav } from "@/components/mobile-bottom-nav";
 import { MobileMenu } from "@/components/mobile-menu";
 import { getCurrentUser } from "@/lib/auth";
-import { supportedCurrencies } from "@/lib/constants";
 import { isAdminUser } from "@/lib/admin";
 import { getWalletOverview } from "@/lib/db";
-import { formatCurrency, getCurrencyLabel, getInitials } from "@/lib/utils";
+import { formatUsdt, getInitials } from "@/lib/utils";
 
 export async function SiteHeader() {
   noStore();
@@ -16,17 +15,18 @@ export async function SiteHeader() {
   const user = await getCurrentUser();
   const admin = isAdminUser(user);
   const wallet = user && !admin ? (await getWalletOverview(user.id)) : null;
-  const currentCurrency = user?.preferredCurrency ?? "RUB";
-  const userBalance = wallet ? formatCurrency(wallet.availableRub, currentCurrency) : null;
+  const userBalance = wallet ? formatUsdt(wallet.availableUsdt ?? "0") : null;
 
   const navItems = admin
     ? [
-        { href: "/", label: "Библиотека" },
+        { href: "/?part=accounts", label: "Аккаунты" },
+        { href: "/?part=services", label: "Услуги" },
         { href: "/admin", label: "Админка" },
       ]
     : user
       ? [
-          { href: "/projects", label: "Проекты" },
+          { href: "/?part=accounts", label: "Аккаунты" },
+          { href: "/?part=services", label: "Услуги" },
           { href: "/purchases", label: "Покупки" },
           { href: "/sales", label: "Продажи" },
           { href: "/chats", label: "Чаты" },
@@ -34,7 +34,8 @@ export async function SiteHeader() {
           { href: "/support", label: "Поддержка" },
         ]
       : [
-          { href: "/", label: "Библиотека" },
+          { href: "/?part=accounts", label: "Аккаунты" },
+          { href: "/?part=services", label: "Услуги" },
           { href: "/support", label: "Поддержка" },
         ];
 
@@ -83,7 +84,6 @@ export async function SiteHeader() {
               user
                 ? {
                     name: user.name,
-                    preferredCurrency: user.preferredCurrency,
                     balanceLabel: userBalance,
                   }
                 : null
@@ -119,29 +119,6 @@ export async function SiteHeader() {
                   </Link>
                 </div>
 
-                {!admin ? (
-                  <div className="border-t border-slate-100 px-5 py-4">
-                    <div className="text-sm font-semibold  text-slate-400">Валюта</div>
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {supportedCurrencies.map((currency) => (
-                        <form key={currency.code} action={updateCurrencyAction}>
-                          <input type="hidden" name="currency" value={currency.code} />
-                          <input type="hidden" name="returnTo" value="/settings" />
-                          <button
-                            type="submit"
-                            className={`rounded-md px-3 py-2 text-sm font-semibold ${
-                              user.preferredCurrency === currency.code
-                                ? "bg-slate-950 text-white"
-                                : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                            }`}
-                          >
-                            {getCurrencyLabel(currency.code)}
-                          </button>
-                        </form>
-                      ))}
-                    </div>
-                  </div>
-                ) : null}
 
                 <div className="border-t border-slate-100 px-5 py-4">
                   <form action={logoutAction}>

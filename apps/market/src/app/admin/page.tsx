@@ -2,24 +2,30 @@ import { unstable_noStore as noStore } from "next/cache";
 import {
   adminCreateCatalogItemAction,
   adminCreateCatalogSectionAction,
-  adminUpdateProjectPlatformAction,
-  adminUpdateProjectPlatformServicesAction,
-  adminUpdateProjectServiceAction,
+  adminUpdateCatalogAvailabilityAction,
   adminUpdateOrderStatusAction,
 } from "@/app/actions";
 import { requireAdminUser } from "@/lib/auth";
 import { catalogFamilyLabels, catalogKindLabels } from "@/lib/constants";
+import {marketArea} from '@/lib/market-area';
 import { getAdminDashboardData } from "@/lib/db";
-import { formatCurrency, formatDateTime, formatOrderStatus } from "@/lib/utils";
+import { formatMarketPrice, formatDateTime, formatOrderStatus } from "@/lib/utils";
 
-export default async function AdminPage() {
+export default async function AdminPage({searchParams}:{searchParams:Promise<{catalog?:string}>}) {
   noStore();
 
   const admin = await requireAdminUser();
   const data = (await getAdminDashboardData());
+  const {catalog}=await searchParams;
+  const kinds=[...new Set(data.catalogItems.map(item=>catalogKindLabels[item.kind]??item.kind))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const families=[...new Set(data.catalogItems.map(item=>catalogFamilyLabels[item.family]??item.family))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const sectionNames=[...new Set(data.catalogItems.flatMap(item=>item.sections.map(section=>section.name)))].sort((a,b)=>a.localeCompare(b,'ru'));
+  const notices:Record<string,string>={created:'Категория добавлена в выбранный раздел. Пользователи могут размещать в ней объявления.','section-created':'Подкатегория добавлена в выбранный раздел.',exists:'Категория с таким названием уже существует.',invalid:'Проверьте название, описание и раздел категории.',failed:'Не удалось сохранить категорию. Повторите попытку.'};
 
   return (
     <div className="space-y-6">
+      {catalog==='availability-saved'&&<p role="status" className="border-b border-slate-200 pb-4 text-sm text-slate-700">Доступность сохранена. Изменения применены к каталогу и новым сделкам.</p>}
+      {catalog&&notices[catalog]&&<p role={['created','section-created'].includes(catalog)?'status':'alert'} className="border-b border-slate-200 pb-4 text-sm text-slate-700">{notices[catalog]}</p>}
       <a href="/manage/commerce" className="inline-block text-sm font-semibold text-green-700">Пополнения, выводы и сделки гаранта →</a>
       <section className="rounded-lg border border-slate-200 bg-slate-950 p-6 text-white shadow-sm sm:p-8">
         <div className="text-sm font-semibold  text-green-100">Администратор</div>
@@ -44,160 +50,25 @@ export default async function AdminPage() {
         </div>
       </section>
 
-      <section className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60 sm:p-8">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
-          <div>
-            <div className="text-sm font-semibold  text-slate-400">Проектные услуги</div>
-            <h2 className="mt-2 text-3xl font-semibold text-slate-950">Настройки платформ и услуг</h2>
-          </div>
-          <div className="text-sm text-slate-500">Изменения сразу применяются в форме публикации.</div>
-        </div>
-
-        <div className="mt-6 grid gap-6 xl:grid-cols-2">
-          <div>
-            <div className="mb-4 text-xl font-semibold text-slate-950">Платформы</div>
-            <div className="grid gap-4">
-              {data.projectSettings.platforms.map((platform) => (
-                <form key={platform.id} action={adminUpdateProjectPlatformAction} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                  <input type="hidden" name="platformId" value={platform.id} />
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="font-semibold text-slate-950">{platform.id}</div>
-                    <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
-                      <input type="checkbox" name="enabled" value="true" defaultChecked={platform.enabled} />
-                      Включена
-                    </label>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    <input
-                      name="label"
-                      defaultValue={platform.label}
-                      placeholder="Название"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                    <input
-                      name="sourcePlaceholder"
-                      defaultValue={platform.sourcePlaceholder}
-                      placeholder="Подсказка источника"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                    <input
-                      name="targetsLabel"
-                      defaultValue={platform.targetsLabel}
-                      placeholder="Название поля целей"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                    <textarea
-                      name="targetsPlaceholder"
-                      defaultValue={platform.targetsPlaceholder}
-                      rows={3}
-                      placeholder="Подсказка списка целей"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300 lg:col-span-2"
-                    />
-                  </div>
-                  <button type="submit" className="mt-4 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-                    Сохранить платформу
-                  </button>
-                </form>
-              ))}
+      <section className="rounded-lg border border-slate-200 bg-white p-5 sm:p-8">
+        <h2 className="text-2xl font-semibold text-slate-950">Доступность категорий и подкатегорий</h2>
+        <p className="mt-2 text-sm text-slate-600">Только созданный каталог. Отключение запрещает новые объявления и покупки, но сохраняет текущие заказы и чаты.</p>
+        <div className="mt-6 grid min-w-0 gap-6 lg:grid-cols-2">
+          {(['accounts','services'] as const).map(area=><section key={area} className="min-w-0" aria-label={area==='accounts'?'Доступность аккаунтов':'Доступность услуг'}>
+            <h3 className="mb-4 text-xl font-semibold">{area==='accounts'?'Аккаунты':'Услуги'}</h3>
+            <div className="space-y-4">
+              {data.catalogItems.filter(item=>item.sections.some(section=>marketArea(section)===area)).map(item=><form key={item.id} action={adminUpdateCatalogAvailabilityAction} className="min-w-0 rounded-lg border border-slate-200 p-4">
+                <input type="hidden" name="itemId" value={item.id}/><input type="hidden" name="area" value={area}/>
+                <h4 className="break-words text-lg font-semibold">{item.name}</h4>
+                <label className="mt-3 flex items-center gap-2 font-medium"><input type="checkbox" name="enabled" value="true" defaultChecked={item.availability?.[area]!==false}/>Категория доступна</label>
+                <fieldset className="mt-4 space-y-2"><legend className="mb-2 text-sm text-slate-500">Подкатегории</legend>
+                  {item.sections.filter(section=>marketArea(section)===area).map(section=><label key={section.id} className="flex items-start gap-2 rounded-md bg-slate-50 p-3 text-sm"><input type="checkbox" name="sections" value={section.id} defaultChecked={section.enabled!==false} className="mt-0.5"/><span className="min-w-0 break-words">{section.name}</span></label>)}
+                </fieldset>
+                <button type="submit" className="mt-4 rounded-md bg-green-700 px-4 py-3 text-sm font-semibold text-white">Сохранить доступность</button>
+              </form>)}
+              {!data.catalogItems.some(item=>item.sections.some(section=>marketArea(section)===area))&&<p className="text-sm text-slate-500">Пока нет категорий в этом разделе. Добавьте их ниже.</p>}
             </div>
-          </div>
-
-          <div>
-            <div className="mb-4 text-xl font-semibold text-slate-950">Услуги</div>
-            <div className="grid gap-4">
-              {data.projectSettings.services.map((service) => (
-                <form key={service.id} action={adminUpdateProjectServiceAction} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                  <input type="hidden" name="serviceId" value={service.id} />
-                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                    <div className="font-semibold text-slate-950">{service.id}</div>
-                    <div className="flex flex-wrap gap-4">
-                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
-                        <input type="checkbox" name="enabled" value="true" defaultChecked={service.enabled} />
-                        Включена
-                      </label>
-                      <label className="inline-flex items-center gap-2 text-sm font-semibold text-slate-600">
-                        <input type="checkbox" name="requiresMessage" value="true" defaultChecked={service.requiresMessage} />
-                        Нужен текст
-                      </label>
-                    </div>
-                  </div>
-                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
-                    <input
-                      name="label"
-                      defaultValue={service.label}
-                      placeholder="Название услуги"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                    <input
-                      name="titlePlaceholder"
-                      defaultValue={service.titlePlaceholder}
-                      placeholder="Подсказка заголовка"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                    <textarea
-                      name="descriptionPlaceholder"
-                      defaultValue={service.descriptionPlaceholder}
-                      rows={3}
-                      placeholder="Подсказка описания"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300 lg:col-span-2"
-                    />
-                    <input
-                      name="messageLabel"
-                      defaultValue={service.messageLabel ?? ""}
-                      placeholder="Название поля текста"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                    <textarea
-                      name="messagePlaceholder"
-                      defaultValue={service.messagePlaceholder}
-                      rows={3}
-                      placeholder="Подсказка текста сообщения"
-                      className="rounded-lg border border-slate-200 bg-white px-4 py-3 outline-none focus:border-slate-300"
-                    />
-                  </div>
-                  <button type="submit" className="mt-4 rounded-lg bg-slate-950 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800">
-                    Сохранить услугу
-                  </button>
-                </form>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        <div className="mt-8">
-          <div className="mb-4 text-xl font-semibold text-slate-950">Доступность услуг по платформам</div>
-          <div className="grid gap-4 lg:grid-cols-2">
-            {data.projectSettings.platforms.map((platform) => {
-              const enabledServices = new Set(
-                data.projectSettings.platformServices
-                  .filter((entry) => entry.platformId === platform.id && entry.enabled)
-                  .map((entry) => entry.serviceId),
-              );
-
-              return (
-                <form key={platform.id} action={adminUpdateProjectPlatformServicesAction} className="rounded-lg border border-slate-200 bg-slate-50 p-5">
-                  <input type="hidden" name="platformId" value={platform.id} />
-                  <div className="font-semibold text-slate-950">{platform.label}</div>
-                  <div className="mt-4 grid gap-2 sm:grid-cols-2">
-                    {data.projectSettings.services.map((service) => (
-                      <label key={service.id} className="inline-flex items-center gap-2 rounded-lg bg-white px-3 py-2 text-sm font-semibold text-slate-600">
-                        <input
-                          type="checkbox"
-                          name="services"
-                          value={service.id}
-                          defaultChecked={enabledServices.has(service.id)}
-                        />
-                        {service.label}
-                      </label>
-                    ))}
-                  </div>
-                  <button type="submit" className="mt-4 rounded-lg bg-green-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-green-500">
-                    Сохранить доступность
-                  </button>
-                </form>
-              );
-            })}
-          </div>
+          </section>)}
         </div>
       </section>
 
@@ -218,7 +89,7 @@ export default async function AdminPage() {
                       </div>
                     </div>
                     <div className="text-right">
-                      <div className="text-lg font-semibold text-slate-950">{formatCurrency(order.amountRub)}</div>
+                      <div className="text-lg font-semibold text-slate-950">{formatMarketPrice(order.amountUsdt)}</div>
                       <div className="mt-1 text-sm text-slate-400">{formatDateTime(order.createdAt)}</div>
                     </div>
                   </div>
@@ -265,29 +136,29 @@ export default async function AdminPage() {
 
         <div className="space-y-6">
           <form action={adminCreateCatalogItemAction} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60">
-            <div className="text-2xl font-semibold text-slate-950">Добавить игру или сервис</div>
+            <h2 className="text-2xl font-semibold text-slate-950">Добавить категорию маркета</h2>
             <div className="mt-5 space-y-4">
+              <label className="block text-sm font-medium text-slate-700">Раздел маркета
+                <select name="area" defaultValue="both" className="mt-2 w-full rounded-md border border-slate-200 bg-white px-4 py-3">
+                  <option value="accounts">Аккаунты</option><option value="services">Услуги</option><option value="both">Аккаунты и услуги</option>
+                </select>
+              </label>
               <input
-                name="name"
+                name="name" required minLength={2} maxLength={120} aria-label="Название категории маркета"
                 placeholder="Название"
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300"
               />
-              <select name="kind" defaultValue="GAME" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300">
-                {Object.entries(catalogKindLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-              <select name="family" defaultValue="shooter" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300">
-                {Object.entries(catalogFamilyLabels).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-slate-700">Тип категории
+                <input name="kind" required maxLength={80} list="catalog-kinds" placeholder="Введите или выберите" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3"/>
+                <datalist id="catalog-kinds">{kinds.map(value=><option key={value} value={value}/>)}</datalist>
+              </label>
+              <label className="block text-sm font-medium text-slate-700">Группа
+                <input name="family" required maxLength={80} list="catalog-families" placeholder="Введите или выберите" className="mt-2 w-full rounded-lg border border-slate-200 bg-white px-4 py-3"/>
+                <datalist id="catalog-families">{families.map(value=><option key={value} value={value}/>)}</datalist>
+              </label>
+              <p className="text-sm text-slate-500">Начните вводить, чтобы выбрать созданный вариант, или укажите новый.</p>
               <textarea
-                name="description"
+                name="description" maxLength={2000}
                 rows={4}
                 placeholder="Краткое описание раздела"
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300"
@@ -300,8 +171,9 @@ export default async function AdminPage() {
 
           <form action={adminCreateCatalogSectionAction} className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60">
             <div className="text-2xl font-semibold text-slate-950">Добавить подкатегорию</div>
+            {!data.catalogItems.length&&<p className="mt-3 text-sm text-slate-600">Сначала добавьте категорию маркета.</p>}
             <div className="mt-5 space-y-4">
-              <select name="itemId" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300">
+              <select name="itemId" required disabled={!data.catalogItems.length} className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300">
                 {data.catalogItems.map((item) => (
                   <option key={item.id} value={item.id}>
                     {item.name}
@@ -309,11 +181,18 @@ export default async function AdminPage() {
                 ))}
               </select>
               <input
-                name="sectionName"
-                placeholder="Например: Twitch Drops, Баланс, Рейды"
+                name="sectionName" required minLength={2} maxLength={120} aria-label="Название подкатегории"
+                list="catalog-section-names"
+                placeholder="Название подкатегории"
                 className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 outline-none focus:border-slate-300"
               />
-              <button type="submit" className="rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800">
+              <datalist id="catalog-section-names">{sectionNames.map(value=><option key={value} value={value}/>)}</datalist>
+              <label className="block text-sm font-medium text-slate-700">Раздел для подкатегории
+                <select name="area" defaultValue="services" className="mt-2 w-full rounded-md border border-slate-200 bg-white px-4 py-3">
+                  <option value="accounts">Аккаунты</option><option value="services">Услуги</option>
+                </select>
+              </label>
+              <button type="submit" disabled={!data.catalogItems.length} className="rounded-lg bg-slate-950 px-5 py-3 font-semibold text-white hover:bg-slate-800 disabled:opacity-50">
                 Добавить подкатегорию
               </button>
             </div>
@@ -321,12 +200,13 @@ export default async function AdminPage() {
 
           <div className="rounded-lg border border-slate-200 bg-white p-6 shadow-sm shadow-slate-200/60">
             <div className="mb-5 text-2xl font-semibold text-slate-950">Каталог</div>
+            {!data.catalogItems.length&&<p className="text-sm text-slate-600">Категорий нет. Добавьте первую категорию через форму выше.</p>}
             <div className="space-y-3">
               {data.catalogItems.slice(0, 14).map((item) => (
                 <div key={item.id} className="rounded-lg bg-slate-50 p-4">
                   <div className="font-semibold text-slate-950">{item.name}</div>
                   <div className="mt-1 text-sm text-slate-500">
-                    {catalogKindLabels[item.kind]} · {item.sectionStats.length} подкатегорий · {item.listingCount} офферов
+                    {catalogKindLabels[item.kind]??item.kind} · {item.sectionStats.length} подкатегорий · {item.listingCount} офферов
                   </div>
                 </div>
               ))}

@@ -1,6 +1,6 @@
 import { db } from "../config/db.js";
 
-export const featureKeys = Object.freeze(["p2p", "processing", "nft", "market", "guarantor"]);
+export const featureKeys = Object.freeze(["p2p", "processing", "nft", "market", "guarantor", "futures"]);
 const defaults = Object.freeze(Object.fromEntries(featureKeys.map((key) => [key, true])));
 let cache = { expiresAt: 0, value: defaults };
 
@@ -18,15 +18,47 @@ export const getPlatformFeatures = async () => {
 
 export const updatePlatformFeature = async (feature, enabled) => {
   if (!featureKeys.includes(feature)) throw new Error("Unknown platform feature");
-  await db.execute(
+  if(feature==='futures'&&!enabled){
+    const connection=await db.getConnection();
+    try{
+      await connection.beginTransaction();
+      // Futures order transactions hold a shared lock on this row until they commit.
+      await connection.execute("SELECT enabled FROM platform_features WHERE feature_key='futures' FOR UPDATE");
+      const [[{busy}]]=await connection.query(`SELECT (
+        EXISTS(SELECT 1 FROM futures_positions WHERE status='OPEN')
+        OR EXISTS(SELECT 1 FROM trading_orders WHERE market='FUTURES' AND status IN ('OPEN','PARTIALLY_FILLED'))
+      ) AS busy`);
+      if(Number(busy))throw Object.assign(new Error('Сначала закройте фьючерсные позиции и отмените активные ордера.'),{status:409});
+      await saveFeature(connection,feature,enabled);
+      await connection.commit();
+    }catch(error){
+      await connection.rollback().catch(()=>{});
+      throw error;
+    }finally{
+      connection.release();
+    }
+  }else await saveFeature(db,feature,enabled);
+  cache.expiresAt = 0;
+  return getPlatformFeatures();
+};
+
+function saveFeature(connection,feature,enabled){
+  return connection.execute(
     `INSERT INTO platform_features (feature_key, enabled)
      VALUES (?, ?)
      ON DUPLICATE KEY UPDATE enabled = VALUES(enabled)`,
     [feature, enabled ? 1 : 0]
   );
-  cache.expiresAt = 0;
-  return getPlatformFeatures();
-};
+}
+
+export async function assertFuturesAvailable(connection){
+  const [[feature]]=await connection.execute(
+    "SELECT enabled FROM platform_features WHERE feature_key='futures' FOR SHARE"
+  );
+  if(Number(feature?.enabled)!==1){
+    throw Object.assign(new Error('Торговля фьючерсами отключена.'),{status:503,code:'FUTURES_DISABLED'});
+  }
+}
 
 export const requirePlatformFeature = (feature) => async (req, res, next) => {
   try {

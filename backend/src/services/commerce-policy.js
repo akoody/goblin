@@ -32,7 +32,7 @@ export function requireMinimumAmount(value, minimum) {
   if (!amountValue.isFinite() || !minimumValue.isFinite() || minimumValue.lte(0))
     fail("Некорректный минимальный размер сделки");
   if (amountValue.lt(minimumValue))
-    fail(`Минимальная сумма сделки гаранта — ${minimumValue.toFixed(6)} USDT`);
+    fail(`Минимальная сумма сделки гаранта - ${minimumValue.toFixed(6)} USDT`);
 }
 export function uuid(value) {
   if (

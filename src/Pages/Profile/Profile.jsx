@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import {ProfileStats} from './ProfileStats';
+import {assetDecimal} from './walletAmounts.mjs';
 import {NativeWithdrawal} from './NativeWithdrawal';
+import {MarketUsdtTransfer} from './MarketUsdtTransfer';
+import {AuthenticatorSettings} from './AuthenticatorSettings';
 import {TransactionHistory} from '../../Components/TransactionHistory/TransactionHistory';
 import { useSearchParams } from "react-router-dom";
 import styles from "./Profile.module.scss";
@@ -8,6 +11,7 @@ import {
   BiChevronDown,
   BiExit,
   BiGitBranch,
+  BiShield,
   BiWallet,
 } from "react-icons/bi";
 import { GrTransaction } from "react-icons/gr";
@@ -538,7 +542,7 @@ const Action = ({ currency }) => {
   const networkLabel = `${network.network} · ${network.standard}`;
   const minimumWithdrawalAmount = currency === "TRX" ? 1 : 0;
 
-  React.useEffect(() => {
+  const loadWallet = React.useCallback(() => {
     api
       .get(`/api/transactions/balance`)
       .then((response) => setBalance(response.data))
@@ -548,6 +552,7 @@ const Action = ({ currency }) => {
         });
       });
   }, [currency]);
+  React.useEffect(loadWallet,[loadWallet]);
 
   const copyDepositAddress = async () => {
     if (!depositAddress) return;
@@ -631,7 +636,7 @@ const Action = ({ currency }) => {
           </div>
           {depositsEnabled ? (
             <>
-              <p role="note">Минимум: эквивалент {balance?.depositPolicy?.minUsd||'5'} USDT. Комиссия: эквивалент {balance?.depositPolicy?.feeUsd??'2'} USDT с каждого пополнения, удерживается в валюте депозита после проверки. Другие валюты пересчитываются по курсу к USDT при зачислении. {currency==='BTC'?(wallet?.externalTransfers?.amlMode==='DISABLED'?'Bitcoin: зачисление после 6 подтверждений и сверки поступления. AML отключён — оценка риска не выполняется.':'Bitcoin: не менее 6 подтверждений, затем ручная AML-проверка с внешним отчётом. Мгновенное зачисление недоступно.'):'После подтверждения сети и AML-проверки: низкий риск может зачисляться автоматически, спорные поступления рассматривает администратор.'}</p>
+              <p role="note">Минимум: эквивалент {balance?.depositPolicy?.minUsd||'5'} USDT. Комиссия: эквивалент {balance?.depositPolicy?.feeUsd??'2'} USDT с каждого пополнения, удерживается в валюте депозита после проверки. Другие валюты пересчитываются по курсу к USDT при зачислении. {currency==='BTC'?(wallet?.externalTransfers?.amlMode==='DISABLED'?'Bitcoin: зачисление после 6 подтверждений и сверки поступления. AML отключён - оценка риска не выполняется.':'Bitcoin: не менее 6 подтверждений, затем ручная AML-проверка с внешним отчётом. Мгновенное зачисление недоступно.'):'После подтверждения сети и AML-проверки: низкий риск может зачисляться автоматически, спорные поступления рассматривает администратор.'}</p>
               <div className={styles.profile_action_address}>
                 <span>{depositAddress || "Адрес пока не создан"}</span>
                 <button type="button" onClick={copyDepositAddress} disabled={!depositAddress}>
@@ -723,6 +728,7 @@ const Action = ({ currency }) => {
           </div>
         )}
       </div>
+      {currency==='USDT'&&<MarketUsdtTransfer onTransferred={loadWallet}/>}
       <div className={styles.profile_action_body}>
         <div>
           <p>
@@ -1113,8 +1119,12 @@ const Referral = () => {
 
   const copyLink = async () => {
     if (!referralLink) return;
-    await navigator.clipboard.writeText(referralLink);
-    enqueueSnackbar("Реферальная ссылка скопирована", { variant: "success" });
+    try {
+      await navigator.clipboard.writeText(referralLink);
+      enqueueSnackbar("Реферальная ссылка скопирована", { variant: "success" });
+    } catch {
+      enqueueSnackbar("Не удалось скопировать автоматически. Выделите ссылку и скопируйте её вручную.", {variant:'warning'});
+    }
   };
 
   return (
@@ -1128,18 +1138,22 @@ const Referral = () => {
       </div>
       <div className={styles.profile_info_lines}>
         <div>
-          <p>Заработано</p>
-          <span>{formatAssetAmount(data?.rewardTotal, 8)} USDT</span>
+          <p>Начислено по валютам</p>
+          {data?.rewardBalances?.length?data.rewardBalances.map(r=><span key={r.currency}>{assetDecimal(r.amount)} {r.currency}</span>):<span>{loading?'Загрузка…':'Начислений пока нет'}</span>}
         </div>{" "}
         <div>
           <p>ВАШ % ОТ КОМИССИЙ</p>
-          <span>{data?.ratePercent || 0}%</span>
+          <span>{loading?'…':`${data?.ratePercent??'-'}%`}</span>
+          <p>{data?.customRatePercent==null?'Общая ставка':'Индивидуальная ставка'}</p>
         </div>{" "}
         <div>
           <p>КОЛИЧЕСТВО ПОДКЛЮЧЕННЫХ АККАУНТОВ</p>
           <span>{data?.invitedCount || 0}</span>
         </div>{" "}
       </div>
+      {data&&<p>Ставка - доля от комиссии биржи по операциям ваших приглашённых, не от суммы их сделки или пополнения. Изменения ставки не пересчитывают прежние начисления.</p>}
+      {data?.accrualEnabled===false&&<p>Автоматическое начисление и перевод вознаграждений пока не подключены.</p>}
+      {data?.accrualEnabled===true&&<p>Вознаграждения автоматически поступают на основной баланс в валюте комиссии. Это внутреннее зачисление; внешний вывод зависит от доступности средств в сети.</p>}
       <div className={styles.profile_referral_link}>
         <h2>Ваш код</h2>
         <p>{data?.code || "-"}</p>
@@ -1162,6 +1176,13 @@ const Referral = () => {
 };
 
 const navigationItems = [
+  {
+    name: "Безопасность",
+    id: 6,
+    key: "security",
+    icon: <BiShield />,
+    page: <AuthenticatorSettings />,
+  },
   {
     name: "Перевод",
     id: 1,

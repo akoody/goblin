@@ -5,7 +5,8 @@ import { requireUser } from "@/lib/auth";
 import { isAdminUser } from "@/lib/admin";
 import { getAdminDashboardData, getUserProfileData } from "@/lib/db";
 import {
-  formatCurrency,
+  formatMarketPrice,
+  formatUsdt,
   formatDate,
   formatOrderStatus,
   formatUserRole,
@@ -88,7 +89,7 @@ export default async function ProfilePage() {
               { label: "Чаты", value: profile.stats.chats },
               { label: "Проекты", value: profile.stats.activeProjects },
               { label: "Офферы", value: profile.stats.activeListings },
-              { label: "Оборот", value: formatCurrency(profile.stats.totalTurnoverRub, profile.user.preferredCurrency) },
+              { label: "Оборот USDT", value: formatUsdt(profile.stats.totalTurnoverUsdt ?? "0") },
               { label: "На сайте", value: formatDate(profile.user.createdAt) },
             ].map((item) => (
               <div key={item.label} className="rounded-lg bg-slate-50 p-4">
@@ -129,7 +130,7 @@ export default async function ProfilePage() {
                 <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                   <span className="text-slate-400">{formatOrderStatus(order.status)}</span>
                   <span className="font-semibold text-slate-950">
-                    {formatCurrency(order.amountRub, profile.user.preferredCurrency)}
+                    {formatMarketPrice(order.amountUsdt)}
                   </span>
                 </div>
               </div>
@@ -147,7 +148,7 @@ export default async function ProfilePage() {
                 <div className="mt-3 flex items-center justify-between gap-3 text-sm">
                   <span className="text-slate-400">{formatOrderStatus(order.status)}</span>
                   <span className="font-semibold text-slate-950">
-                    {formatCurrency(order.amountRub, profile.user.preferredCurrency)}
+                    {formatMarketPrice(order.amountUsdt)}
                   </span>
                 </div>
               </div>

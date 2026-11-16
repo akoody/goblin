@@ -59,6 +59,7 @@ test('Queueing reserves treasury availability without locking a waiting customer
    if(sql.startsWith('SELECT id FROM treasury_collection_jobs'))return [[]];
    if(sql.startsWith('SELECT balance'))return [[{balance:'5'}]];
    if(sql.includes('AS amount FROM treasury_collection_jobs'))return [[{amount:'0'}]];
+   if(sql.includes('amount FROM treasury_payouts'))return [[{amount:'0'}]];
    if(sql.startsWith('INSERT INTO treasury_collection_jobs')){inserted++;assert(sql.includes("'queued'"));assert.equal(args[7],'1');return [{affectedRows:1}];}
    if(sql.startsWith('UPDATE treasury_collection_plans')||sql.startsWith('INSERT INTO treasury_collection_audit'))return [{affectedRows:1}];
    throw new Error('Unexpected write or query: '+sql);

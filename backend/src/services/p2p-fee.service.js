@@ -1,4 +1,5 @@
 import Decimal from "decimal.js";
+import {accrueReferral} from './referral-accrual.service.js';
 import {consumeFeeBonus,discountedFeePercent} from './fee-bonus.service.js';
 import { db } from "../config/db.js";
 
@@ -41,6 +42,7 @@ export async function applyP2pCommission(connection, { dealId, sellerId, benefic
        ON DUPLICATE KEY UPDATE balance=balance+VALUES(balance)`,
       [settlement.feeAmount],
     );
+    await accrueReferral(connection, {kind:'P2P',sourceId:dealId,payerId:beneficiaryId || sellerId,sourceUserId:sellerId,currency:'USDT',fee:settlement.feeAmount});
   }
   return settlement;
 }

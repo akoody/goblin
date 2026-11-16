@@ -17,7 +17,7 @@ type SellPageProps = {
 export default async function SellListingPage({ params, searchParams }: SellPageProps) {
   noStore();
 
-  const user = await requireMarketplaceUser();
+  await requireMarketplaceUser();
   const { slug } = await params;
   const resolvedSearchParams = (await searchParams) ?? {};
   const details = (await getCatalogItemBySlug(slug, {
@@ -61,7 +61,6 @@ export default async function SellListingPage({ params, searchParams }: SellPage
           itemName={details.name}
           sectionId={targetSection.id}
           sectionName={targetSection.name}
-          preferredCurrency={user.preferredCurrency}
         />
       </section>
     </div>

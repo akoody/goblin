@@ -31,7 +31,7 @@ export const Home = () => {
   const [inventory,setInventory]=useState(null);
   const [inventoryError,setInventoryError]=useState(false);
   useEffect(() => {
-    document.title = 'CryptoGoblin — Главная';
+    document.title = 'CryptoGoblin - Главная';
     let active = true;
     api.get('/api/features').then(({ data }) => { if (active) setFeatures(data); }).catch(() => {});
     if (signedIn) {
@@ -53,7 +53,7 @@ export const Home = () => {
         {signedIn ? <>
           <h2>Баланс USDT</h2>
           <strong className={styles.balance}>{inventory ? `${assetDecimal(inventory.coins.find(a=>a.symbol==='USDT')?.total||'0')} USDT` : balanceError ? 'Недоступен' : balances ? `${formatAssetAmount(getBalanceValue(balances,'USDT'),6)} USDT` : 'Загружаем…'}</strong>
-          <p>Остальные активы — ниже, каждый в своей валюте. Пересчёт общей стоимости пока недоступен.</p>
+          <p>Остальные активы - ниже, каждый в своей валюте. Пересчёт общей стоимости пока недоступен.</p>
           <div className={styles.buttons}><Link to='/me' className={styles.primary}><FiArrowDown /> Пополнить</Link><Link to='/me'><FiArrowUp /> Вывести</Link></div>
         </> : <>
           <h2>Начните с биржи</h2>
@@ -82,7 +82,7 @@ export const Home = () => {
       </div>}
       <aside className={styles.help}>
         <h2>{signedIn ? 'Ваши сделки' : 'Перед первой сделкой'}</h2>
-        {signedIn && <Link className={styles.deals} to='/p2p/my-deals'><span>Активные P2P-сделки</span><strong>{activeDeals ?? '—'}</strong><FiArrowUpRight /></Link>}
+        {signedIn && <Link className={styles.deals} to='/p2p/my-deals'><span>Активные P2P-сделки</span><strong>{activeDeals ?? '-'}</strong><FiArrowUpRight /></Link>}
         <p>Перед оплатой сверяйте реквизиты, сумму и условия. Не переносите переписку по сделке в сторонние каналы.</p>
         <Link to='/help'>Связаться с поддержкой <FiArrowUpRight /></Link>
       </aside>

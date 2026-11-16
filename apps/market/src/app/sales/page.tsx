@@ -1,7 +1,7 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { requireMarketplaceUser } from "@/lib/auth";
 import { listUserOrders } from "@/lib/db";
-import { formatCurrency, formatDateTime, formatOrderStatus, getOrderStatusTone } from "@/lib/utils";
+import { formatMarketPrice, formatDateTime, formatOrderStatus, getOrderStatusTone } from "@/lib/utils";
 
 type SalesPageProps = {
   searchParams?: Promise<{
@@ -105,7 +105,7 @@ export default async function SalesPage({ searchParams }: SalesPageProps) {
               <div className="flex items-center justify-between gap-3 lg:block lg:text-right">
                 <div className="text-xs font-semibold  text-slate-400 lg:hidden">Сумма</div>
                 <div className="text-lg font-semibold text-slate-950 sm:text-xl">
-                  {formatCurrency(order.amountRub, user.preferredCurrency)}
+                  {formatMarketPrice(order.amountUsdt)}
                 </div>
               </div>
             </div>

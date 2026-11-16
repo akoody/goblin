@@ -1,4 +1,6 @@
 import express from "express";
+import pushRoutes from './routes/push.routes.js';
+import {notifyDealMessage} from './services/push.service.js';
 import tronSwapRoutes from './routes/tron-swap.routes.js';
 import solanaRoutes from './routes/solana.routes.js';
 import pumpRoutes from './routes/pump.routes.js';
@@ -18,6 +20,7 @@ import {db} from "./config/db.js";
 import dealsRoutes from "./routes/deal.routes.js";
 import apiTransactionRoutes from "./routes/api/transactions.routes.js";
 import apiAuthRoutes from "./routes/api/auth.routes.js";
+import {authenticatorRoutes} from './routes/api/authenticator.routes.js';
 import authRoutes from "./routes/auth.routes.js";
 import otherRoutes from "./routes/other.routes.js";
 import orderRoutes from "./routes/order.routes.js";
@@ -126,6 +129,7 @@ io.use(async (socket, next) => {
 });
 
 io.on('connection', (socket) => {
+    socket.join(`account:${socket.user.userId}`);
 
     socket.on('joinRoom', async (room, callback) => {
         try {
@@ -205,6 +209,7 @@ io.on('connection', (socket) => {
             };
 
             io.to(room).emit('message', msg);
+            notifyDealMessage('p2p',normalizedDealId,senderId);
             callback?.({ ok: true, message: msg });
 
         } catch (err) {
@@ -221,6 +226,7 @@ app.set("trust proxy", "loopback");
 app.options("*", cors(corsOptions));
 app.use('/api/pump/draft',express.json({limit:'1500kb'}));
 app.use(express.json());
+app.use('/api/push',pushRoutes);
 app.use('/api/tron-swap',tronSwapRoutes);
 app.use('/api/solana',solanaRoutes);
 app.use('/api/pump',pumpRoutes);
@@ -234,6 +240,7 @@ app.use('/api/market-app',marketAppRoutes);
 app.use("/order", requirePlatformFeature("p2p"), orderRoutes);
 app.use("/deal", auth, requirePlatformFeature("p2p"), dealsRoutes);
 app.use("/api/transactions", auth, apiTransactionRoutes);
+app.use('/api/auth/2fa',auth,authenticatorRoutes(userId=>io.in(`account:${userId}`).disconnectSockets(true)));
 app.use("/api/auth", auth, apiAuthRoutes);
 app.use("/auth", authRoutes);
 app.use("/payment-methods", auth, paymentMethodRoutes);

@@ -290,7 +290,7 @@ export const Processing = () => {
                       </div>
                       <footer>
                         <span>{formatMoney(requisite.usedAmount, requisite.fiatCurrency)} / {formatMoney(requisite.limitAmount, requisite.fiatCurrency)}</span>
-                        <small>лимит транзакции: {formatMoney(requisite.minTransactionAmount, requisite.fiatCurrency)}–{formatMoney(requisite.maxTransactionAmount, requisite.fiatCurrency)}</small>
+                        <small>лимит транзакции: {formatMoney(requisite.minTransactionAmount, requisite.fiatCurrency)}-{formatMoney(requisite.maxTransactionAmount, requisite.fiatCurrency)}</small>
                       </footer>
                     </article>
                   ))}

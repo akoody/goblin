@@ -1,11 +1,11 @@
 import { unstable_noStore as noStore } from "next/cache";
 import { requireMarketplaceUser } from "@/lib/auth";
 import { getWalletOverview } from "@/lib/db";
-import { WalletForms } from "@/components/wallet-forms";
+import {MarketUsdtTransfer} from "@/components/market-usdt-transfer";
+import {randomUUID} from "node:crypto";
 import {
-  formatCurrency,
   formatDateTime,
-  formatSignedCurrency,
+  formatUsdt,
   formatTransactionStatus,
   formatTransactionType,
 } from "@/lib/utils";
@@ -31,7 +31,7 @@ export default async function WalletPage({ searchParams }: WalletPageProps) {
             <div className="text-sm font-semibold  text-slate-400">Кошелёк</div>
             <h1 className="mt-2 text-3xl font-semibold text-slate-950 sm:text-3xl">Финансы</h1>
             <div className="mt-4 text-2xl font-semibold text-slate-950 sm:text-3xl">
-              {formatCurrency(wallet.availableRub, user.preferredCurrency)}
+              {formatUsdt(wallet.availableUsdt ?? "0")}
             </div>
           </div>
 
@@ -53,7 +53,7 @@ export default async function WalletPage({ searchParams }: WalletPageProps) {
         </div>
       </section>
 
-      <WalletForms preferredCurrency={user.preferredCurrency} />
+      <MarketUsdtTransfer market={wallet.availableUsdt ?? "0"} exchange={wallet.exchangeUsdt ?? "0"} initialKey={randomUUID()}/>
 
       <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm shadow-slate-200/60">
         <div className="hidden grid-cols-[1.2fr_2fr_1fr_1fr] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 text-sm font-semibold text-slate-500 md:grid">
@@ -63,7 +63,7 @@ export default async function WalletPage({ searchParams }: WalletPageProps) {
           <div className="text-right">Сумма</div>
         </div>
         <div className="divide-y divide-slate-200">
-          {wallet.transactions.map((transaction) => (
+          {wallet.transactions.filter(transaction => transaction.amountUsdt !== undefined).map((transaction) => (
             <div key={transaction.id} className="grid gap-4 px-4 py-5 sm:px-5 md:grid-cols-[1.2fr_2fr_1fr_1fr]">
               <div>
                 <div className="mb-1 text-xs font-semibold  text-slate-400 md:hidden">Дата</div>
@@ -80,8 +80,8 @@ export default async function WalletPage({ searchParams }: WalletPageProps) {
               </div>
               <div className="flex items-center justify-between gap-3 md:block md:text-right">
                 <div className="text-xs font-semibold  text-slate-400 md:hidden">Сумма</div>
-                <div className={`text-lg font-semibold ${transaction.amountRub >= 0 ? "text-emerald-600" : "text-slate-950"}`}>
-                  {formatSignedCurrency(transaction.amountRub, user.preferredCurrency)}
+                <div className={`text-lg font-semibold ${!transaction.amountUsdt?.startsWith("-") ? "text-emerald-600" : "text-slate-950"}`}>
+                  {formatUsdt(transaction.amountUsdt!)}
                 </div>
               </div>
             </div>

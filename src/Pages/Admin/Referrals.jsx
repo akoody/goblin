@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import api from '../../api';
 import styles from './Referrals.module.scss';
+import {ReferralRates} from './ReferralRates';
 
 const linkFor = code => `${window.location.origin}/signin?ref=${encodeURIComponent(code)}`;
 const amount = value => String(value ?? '0').replace(/(\.\d*?[1-9])0+$|\.0+$/, '$1');
@@ -26,7 +27,8 @@ function Pages({ data, page, onChange, loading }) {
   </div>;
 }
 
-export function Referrals() {
+export function Referrals({readOnly=false}) {
+  const [checked,setChecked]=useState([]);
   const [query, setQuery] = useState('');
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState(null);
@@ -40,6 +42,13 @@ export function Referrals() {
   const [notice, setNotice] = useState('');
   const [copying, setCopying] = useState(false);
   const request = useRef(0);
+  const selectable=(data?.rows||[]).filter(u=>u.status!=='deleted').map(u=>u.id);
+  const allChecked=selectable.length>0&&selectable.every(id=>checked.includes(id));
+  const toggle=(ids,enable)=>{
+    const next=enable?[...new Set([...checked,...ids])]:checked.filter(id=>!ids.includes(id));
+    if(next.length>200){setError('За раз можно выбрать не более 200 пользователей');return;}
+    setChecked(next);
+  };
 
   useEffect(() => {
     const controller = new AbortController();
@@ -83,21 +92,25 @@ export function Referrals() {
 
   return <section className={styles.referrals}>
     <h2>Реферальные приглашения</h2>
-    <p>По каждой ссылке — регистрации и внешние криптопополнения приглашённых за всё время. Подтверждённая сумма указана до комиссии, зачисленная — после. Внутренние переводы и сделки не считаются пополнениями. Разные валюты не складываются.</p>
+    {!readOnly&&<ReferralRates userIds={checked} onSaved={()=>{setRefresh(v=>v+1);}}/>}
+    <p>По каждой ссылке - регистрации и внешние криптопополнения приглашённых за всё время. Подтверждённая сумма указана до комиссии, зачисленная - после. Внутренние переводы и сделки не считаются пополнениями. Разные валюты не складываются.</p>
     <div className={styles.toolbar}>
-      <label>Поиск пригласившего<input type="search" value={query} maxLength={160} placeholder="Имя, email, ID или код" onChange={event => { setQuery(event.target.value); setPage(1); setSelected(null); }} /></label>
+      <label>Поиск пригласившего<input type="search" value={query} maxLength={160} placeholder="Имя, email, ID или код" onChange={event => { setQuery(event.target.value); setPage(1); setSelected(null); setChecked([]); }} /></label>
       <button type="button" disabled={loading} onClick={() => setRefresh(value => value + 1)}>Обновить</button>
+      {!readOnly&&checked.length>0&&<button type="button" onClick={()=>setChecked([])}>Снять выбор ({checked.length})</button>}
     </div>
     {error && <p role="alert">{error}</p>}
     {notice && <p className={styles.link} role="status">{notice}</p>}
     {loading && <p role="status">Загружаем…</p>}
-    <div className={styles.table}><table><thead><tr><th>Пригласивший</th><th>Ссылка</th><th>Регистрации</th><th>Пополнения по валютам</th><th>Подробности</th></tr></thead>
+    <div className={styles.table}><table><thead><tr>{!readOnly&&<th className={styles.selection}><input type="checkbox" aria-label="Выбрать текущую страницу" checked={allChecked} disabled={loading||!selectable.length} onChange={e=>toggle(selectable,e.target.checked)}/></th>}<th>Пригласивший</th><th>Процент</th><th>Ссылка</th><th>Регистрации</th><th>Пополнения по валютам</th><th>Подробности</th></tr></thead>
       <tbody>{data?.rows.map(user => <tr key={user.id}>
+        {!readOnly&&<td className={styles.selection}><input type="checkbox" aria-label={`Выбрать пользователя ${user.id}`} disabled={user.status==='deleted'||!checked.includes(user.id)&&checked.length>=200} checked={checked.includes(user.id)} onChange={e=>toggle([user.id],e.target.checked)}/></td>}
         <td>{user.username} · #{user.id}<div>{user.email}</div></td>
+        <td>{user.effectiveRatePercent??'-'}%<div>{user.customRatePercent==null?'Общая ставка':'Индивидуальная ставка'}</div></td>
         <td>{user.code && <a href={linkFor(user.code)} target="_blank" rel="noreferrer">{user.code}</a>}<button type="button" disabled={copying} onClick={() => copy(user)}>{user.code ? 'Скопировать ссылку' : 'Выдать ссылку'}</button></td>
         <td>{user.invitedCount}</td><td><Amounts rows={user.amounts} /></td>
         <td><button type="button" onClick={() => { setSelected(user); setInvitePage(1); }}>Приглашённые #{user.id}</button></td>
-      </tr>)}{data && !data.rows.length && <tr><td colSpan="5">Ничего не найдено</td></tr>}</tbody>
+      </tr>)}{data && !data.rows.length && <tr><td colSpan={readOnly?6:7}>Ничего не найдено</td></tr>}</tbody>
     </table></div>
     <Pages data={data} page={page} onChange={setPage} loading={loading} />
     {selected && <section>

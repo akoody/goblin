@@ -1,4 +1,5 @@
 import test from 'node:test';
+import {noReferrer} from './fixtures/no-referrer.js';
 import assert from 'node:assert/strict';
 import * as bitcoin from 'bitcoinjs-lib';
 import {Wallet,Transaction as EthTransaction} from 'ethers';
@@ -61,19 +62,20 @@ test('Safio never maps Bitcoin to TRON; Ethereum uses its own capability',async(
 test('Native deposit credit requires coverage of every client liability, fee and quarantined deposit',async()=>{
  const original=global.fetch;let balance=100n;
  global.fetch=async(_url,options)=>{const {method}=JSON.parse(options.body);const result=method==='eth_chainId'?'0x1':method==='eth_getTransactionCount'?'0x0':method==='eth_getCode'?'0x':'0x'+balance.toString(16);return new Response(JSON.stringify({jsonrpc:'2.0',id:1,result}));};
- const executor={execute:async sql=>[[{amount:sql.includes('admin_treasury_ledger')?'0.000000000000000001':sql.includes('native_fee_ledger')?'0.000000000000000001':'0.000000000000000020'}]]};
+ const executor={execute:async sql=>noReferrer(sql)||[[{amount:sql.includes('admin_treasury_ledger')?'0.000000000000000001':sql.includes('native_fee_ledger')?'0.000000000000000001':'0.000000000000000020'}]]};
  try{const wallet={id:1,address:Wallet.createRandom().address,balance:'0.000000000000000078'};await proveNativeDepositFunding(executor,wallet,'ETH');balance=101n;await assert.rejects(proveNativeDepositFunding(executor,wallet,'ETH'),e=>e.code==='CUSTODY_MISMATCH');}finally{global.fetch=original;}
 });
 test('Withdrawal settles once: service fee on success only, actual gas deducted and full reserve released',async()=>{
  const original=db.getConnection;let status='submitted',expenses=0,profit=0;const writes=[];
  db.getConnection=async()=>({beginTransaction:async()=>{},commit:async()=>{},rollback:async()=>{},release(){},execute:async(sql,args)=>{
+  const referral=noReferrer(sql);if(referral)return referral;
   writes.push({sql,args});if(sql.startsWith('SELECT status'))return [[{status}]];
   if(sql.startsWith('SELECT id,collection_lock_id'))return [[{id:1,collection_lock_id:'job'}]];
   if(sql.startsWith('UPDATE wallets SET balance')){expenses++;assert.equal(args[0],'0.000000000000000107');assert.equal(args[1],'0.000000000000000120');}
   if(sql.startsWith('INSERT INTO native_fee_ledger')){profit++;assert.equal(args.at(-1),'0.000000000000000005');}
   if(sql.startsWith('UPDATE native_chain_jobs'))status=args[0];return [{affectedRows:1}];
  }});
- const plan={currency:'ETH',kind:'withdrawal',sources:[{walletId:1,address:'source'}],outputs:[{address:'to',value:'100'}],amount:'100',serviceFee:'5',total:'120',cost:{fee:'15'}};
- try{const job={id:'job',kind:'withdrawal',currency:'ETH',tx_hash:'hash',plan_json:plan};await settleNativeJob(job,{success:true,fee:2n});await settleNativeJob(job,{success:true,fee:2n});assert.equal(expenses,1);assert.equal(profit,1);assert.equal(status,'confirmed');assert(writes.some(w=>w.sql==='UPDATE wallets SET collection_lock_id=NULL WHERE id=?'));}
+ const plan={currency:'ETH',kind:'withdrawal',sources:[{walletId:1,userId:1,address:'source'}],outputs:[{address:'to',value:'100'}],amount:'100',serviceFee:'5',total:'120',cost:{fee:'15'}};
+ try{const job={id:'job',user_id:1,kind:'withdrawal',currency:'ETH',tx_hash:'hash',plan_json:plan};await settleNativeJob(job,{success:true,fee:2n});await settleNativeJob(job,{success:true,fee:2n});assert.equal(expenses,1);assert.equal(profit,1);assert.equal(status,'confirmed');assert(writes.some(w=>w.sql==='UPDATE wallets SET collection_lock_id=NULL WHERE id=?'));}
  finally{db.getConnection=original;await db.end();}
 });

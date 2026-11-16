@@ -1,6 +1,8 @@
 import Decimal from "decimal.js";
 import { db } from "../config/db.js";
 import { isSupportedSymbol } from "./market-data.service.js";
+import {assertFuturesAvailable} from './platform-features.service.js';
+import {changePumpHolding,getPumpPair,pumpPairPattern} from './pump-spot.service.js';
 
 Decimal.set({ precision: 40, rounding: Decimal.ROUND_DOWN });
 
@@ -26,13 +28,17 @@ const normalizeOrder = (payload = {}) => {
   const symbol = String(payload.symbol || "").toUpperCase().replace("/", "-");
   const side = String(payload.side || "").toUpperCase();
   const type = String(payload.type || "").toUpperCase();
-  if (!MARKETS.has(market) || !SIDES.has(side) || !TYPES.has(type) || !isSupportedSymbol(symbol)) {
+  const pump=market==="SPOT"&&pumpPairPattern.test(symbol);
+  if (!MARKETS.has(market) || !SIDES.has(side) || !TYPES.has(type) || (!pump&&!isSupportedSymbol(symbol))) {
     const error = new Error("Unsupported market, symbol, side or order type");
     error.status = 400;
     throw error;
   }
   const quantity = decimal(payload.quantity, "quantity");
   const price = type === "LIMIT" ? decimal(payload.price, "price") : null;
+  if(pump&&(quantity.decimalPlaces()>6||quantity.gte('1e12')||price&&(price.decimalPlaces()>12||price.gte('1e12')||price.mul(quantity).gte('1e18')))){
+    throw Object.assign(new Error('Проверьте цену и количество токенов. Допускается до 6 знаков в количестве и 12 в цене.'),{status:400});
+  }
   const leverage = market === "FUTURES" ? Number(payload.leverage || 1) : null;
   if (market === "FUTURES" && (!Number.isInteger(leverage) || leverage < 1 || leverage > 20)) {
     const error = new Error("leverage must be an integer from 1 to 20");
@@ -42,7 +48,7 @@ const normalizeOrder = (payload = {}) => {
   return { market, symbol, side, type, quantity, price, leverage };
 };
 
-const parts = (symbol) => symbol.split("-");
+const parts = (symbol) => pumpPairPattern.test(symbol)?[symbol,"USDT"]:symbol.split("-");
 const remaining = (order) => new Decimal(order.quantity).minus(order.filled_quantity);
 
 async function ensureWallet(connection, userId, currency) {
@@ -69,7 +75,7 @@ async function changeWallet(connection, userId, currency, balanceDelta, lockedDe
   await ensureWallet(connection, userId, currency);
   await connection.execute(
     `UPDATE wallets
-     SET balance = balance + ?, locked_balance = locked_balance + ?
+     SET balance = balance + CAST(? AS DECIMAL(36,18)), locked_balance = locked_balance + CAST(? AS DECIMAL(36,18))
      WHERE user_id = ? AND currency = ?`,
     [balanceDelta.toFixed(18), lockedDelta.toFixed(18), userId, currency]
   );
@@ -107,6 +113,10 @@ async function reserveOrder(connection, userId, order) {
     currency = quote;
     amount = order.quantity.mul(order.price).div(order.leverage);
   }
+  if(order.mint&&order.side==="SELL"){
+    await changePumpHolding(connection,userId,order.mint,ZERO,amount);
+    return {currency:null,amount};
+  }
   const wallet = await lockWallet(connection, userId, currency);
   if (available(wallet).lt(amount)) {
     const error = new Error(`Insufficient available ${currency} balance`);
@@ -126,16 +136,21 @@ async function settleSpotFill(connection, maker, taker, price, quantity) {
   const reservedQuote = buyLockPrice.mul(quantity);
 
   await changeWallet(connection, buy.user_id, quote, quoteAmount.neg(), reservedQuote.neg());
-  await changeWallet(connection, buy.user_id, base, quantity);
-  await changeWallet(connection, sell.user_id, base, quantity.neg(), quantity.neg());
+  if(taker.mint){
+    await changePumpHolding(connection,buy.user_id,taker.mint,quantity,ZERO);
+    await changePumpHolding(connection,sell.user_id,taker.mint,quantity.neg(),quantity.neg());
+  }else{
+    await changeWallet(connection, buy.user_id, base, quantity);
+    await changeWallet(connection, sell.user_id, base, quantity.neg(), quantity.neg());
+  }
   await changeWallet(connection, sell.user_id, quote, quoteAmount);
 
   await connection.execute(
-    `UPDATE trading_orders SET reserved_amount = GREATEST(reserved_amount - ?, 0) WHERE id = ?`,
+    `UPDATE trading_orders SET reserved_amount = GREATEST(reserved_amount - CAST(? AS DECIMAL(36,18)), 0) WHERE id = ?`,
     [reservedQuote.toFixed(18), buy.id]
   );
   await connection.execute(
-    `UPDATE trading_orders SET reserved_amount = GREATEST(reserved_amount - ?, 0) WHERE id = ?`,
+    `UPDATE trading_orders SET reserved_amount = GREATEST(reserved_amount - CAST(? AS DECIMAL(36,18)), 0) WHERE id = ?`,
     [quantity.toFixed(18), sell.id]
   );
   return quoteAmount;
@@ -309,19 +324,25 @@ async function match(connection, taker) {
 
 async function releaseOrderReservation(connection, order) {
   const amount = new Decimal(order.reserved_amount || 0);
-  if (amount.lte(0) || !order.reserved_currency) return;
-  await changeWallet(connection, order.user_id, order.reserved_currency, ZERO, amount.neg());
+  if (amount.lte(0)) return;
+  if(!order.reserved_currency){
+    if(order.market!=='SPOT'||order.side!=='SELL'||!pumpPairPattern.test(order.symbol))return;
+    const {mint}=await getPumpPair(order.symbol,connection);
+    await changePumpHolding(connection,order.user_id,mint,ZERO,amount.neg());
+  }else await changeWallet(connection, order.user_id, order.reserved_currency, ZERO, amount.neg());
   await connection.execute(`UPDATE trading_orders SET reserved_amount = 0 WHERE id = ?`, [order.id]);
 }
 
 export async function placeOrder(userId, payload) {
   const input = normalizeOrder(payload);
+  if(pumpPairPattern.test(input.symbol))input.mint=(await getPumpPair(input.symbol)).mint;
   const connection = await db.getConnection();
   const lockName = `trade:${input.market}:${input.symbol}`;
   try {
     const [[lock]] = await connection.query(`SELECT GET_LOCK(?, 5) AS acquired`, [lockName]);
     if (!lock.acquired) { const error = new Error("Market is busy, retry the order"); error.status = 503; throw error; }
     await connection.beginTransaction();
+    if(input.market==="FUTURES")await assertFuturesAvailable(connection);
     if (input.type === "MARKET") {
       const opposite = input.side === "BUY" ? "SELL" : "BUY";
       const direction = input.side === "BUY" ? "ASC" : "DESC";
@@ -343,6 +364,7 @@ export async function placeOrder(userId, payload) {
         throw Object.assign(new Error("Not enough liquidity to fully execute the market order"), { status: 409 });
       }
       input.price = worstPrice;
+      if(input.mint&&input.price.mul(input.quantity).gte('1e18'))throw Object.assign(new Error('Сумма ордера слишком велика.'),{status:400});
     }
     const reservation = await reserveOrder(connection, userId, input);
     const [result] = await connection.execute(
@@ -354,6 +376,7 @@ export async function placeOrder(userId, payload) {
     );
     const [rows] = await connection.execute(`SELECT * FROM trading_orders WHERE id = ? FOR UPDATE`, [result.insertId]);
     const order = rows[0];
+    if(input.mint)order.mint=input.mint;
     const fills = await match(connection, order);
     if (input.type === "MARKET" && order.status !== "FILLED") {
       throw Object.assign(new Error("Market liquidity changed; retry the order"), { status: 409 });
@@ -455,12 +478,33 @@ export async function cancelOrder(userId, orderId) {
   }
 }
 
-export async function getExchangeState(userId, market, symbol) {
+async function exchangeMarket(market, symbol) {
   const normalizedMarket = String(market || "SPOT").toUpperCase();
   const normalizedSymbol = String(symbol || "BTC-USDT").toUpperCase().replace("/", "-");
-  if (!MARKETS.has(normalizedMarket) || !isSupportedSymbol(normalizedSymbol)) {
+  const pump=normalizedMarket==='SPOT'&&pumpPairPattern.test(normalizedSymbol);
+  if (!MARKETS.has(normalizedMarket) || (!pump&&!isSupportedSymbol(normalizedSymbol))) {
     const error = new Error("Unsupported market or symbol"); error.status = 400; throw error;
   }
+  return [normalizedMarket, normalizedSymbol,pump?await getPumpPair(normalizedSymbol):null];
+}
+
+export async function getExchangeBook(market, symbol) {
+  const [normalizedMarket,normalizedSymbol] = await exchangeMarket(market, symbol);
+  const [asks, bids] = await Promise.all(['SELL', 'BUY'].map(async side => {
+    const [rows] = await db.execute(
+      `SELECT price, SUM(quantity - filled_quantity) AS quantity
+       FROM trading_orders WHERE market=? AND symbol=? AND side=? AND order_type='LIMIT'
+         AND status IN ('OPEN','PARTIALLY_FILLED') AND quantity > filled_quantity
+       GROUP BY price ORDER BY price ${side === 'SELL' ? 'ASC' : 'DESC'} LIMIT 50`,
+      [normalizedMarket,normalizedSymbol, side]
+    );
+    return rows;
+  }));
+  return { asks, bids };
+}
+
+export async function getExchangeState(userId, market, symbol) {
+  const [normalizedMarket, normalizedSymbol,pump] = await exchangeMarket(market, symbol);
   const [orders, fills, book, wallets, positions, funding] = await Promise.all([
     db.execute(
       `SELECT * FROM trading_orders WHERE user_id = ? AND market = ? AND symbol = ?
@@ -470,11 +514,7 @@ export async function getExchangeState(userId, market, symbol) {
       `SELECT * FROM trading_fills WHERE market = ? AND symbol = ?
        ORDER BY created_at DESC LIMIT 60`, [normalizedMarket, normalizedSymbol]
     ),
-    db.execute(
-      `SELECT side, price, SUM(quantity - filled_quantity) AS quantity
-       FROM trading_orders WHERE market = ? AND symbol = ? AND status IN ('OPEN','PARTIALLY_FILLED')
-       GROUP BY side, price ORDER BY price DESC`, [normalizedMarket, normalizedSymbol]
-    ),
+    getExchangeBook(normalizedMarket, normalizedSymbol),
     db.execute(
       `SELECT currency, balance, locked_balance, balance - locked_balance AS available
        FROM wallets WHERE user_id = ? AND currency IN (?,?,'USDT')`, [userId,parts(normalizedSymbol)[0],parts(normalizedSymbol)[1]]
@@ -486,12 +526,16 @@ export async function getExchangeState(userId, market, symbol) {
       ? db.execute(`SELECT rate, funding_time FROM futures_funding_rounds WHERE symbol = ? ORDER BY funding_time DESC LIMIT 1`, [normalizedSymbol])
       : Promise.resolve([[]]),
   ]);
+  const balances=wallets[0];
+  if(pump){
+    const [[holding]]=await db.execute("SELECT CAST(amount_atomic-locked_atomic AS CHAR) AS available FROM solana_holdings WHERE user_id=? AND mint=? AND decimals=6",[userId,pump.mint]);
+    balances.push({currency:normalizedSymbol,available:new Decimal(holding?.available??0).div(1_000_000).toFixed(6)});
+  }
   return {
     orders: orders[0],
     fills: fills[0],
-    book: { asks: book[0].filter((row) => row.side === "SELL").sort((a,b) => Number(a.price)-Number(b.price)).slice(0, 20),
-      bids: book[0].filter((row) => row.side === "BUY").slice(0, 20) },
-    wallets: wallets[0],
+    book,
+    wallets: balances,
     positions: positions[0],
     funding: {
       lastRate: funding[0][0]?.rate || "0.0001",

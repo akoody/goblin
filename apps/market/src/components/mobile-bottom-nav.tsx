@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { HelpCircle, Home, LogIn, Megaphone, MessageCircle, PanelTop, ShoppingBag, UserPlus, Wallet } from "lucide-react";
+import { HelpCircle, Home, LogIn, MessageCircle, PanelTop, ShoppingBag, UserPlus, Wallet } from "lucide-react";
 
 type MobileBottomNavProps = {
   admin?: boolean;
@@ -20,7 +20,6 @@ export function MobileBottomNav({ admin = false, authenticated }: MobileBottomNa
     : authenticated
       ? [
           { href: "/", label: "Каталог", icon: Home },
-          { href: "/projects", label: "Проекты", icon: Megaphone },
           { href: "/purchases", label: "Покупки", icon: ShoppingBag },
           { href: "/chats", label: "Чаты", icon: MessageCircle },
           { href: "/wallet", label: "Кошелёк", icon: Wallet },

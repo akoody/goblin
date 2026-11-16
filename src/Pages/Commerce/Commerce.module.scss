@@ -348,3 +348,20 @@
     justify-self: stretch;
   }
 }
+.attachmentDownload {
+  max-width: 100%;
+  text-align: left;
+  overflow-wrap: anywhere;
+  border: 1px solid #d7e5dc;
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: #21563a;
+  background: #f4faf6;
+  cursor: pointer;
+}
+
+.attachmentPicker input[type="file"] {
+  width: 100%;
+  min-width: 0;
+  font: inherit;
+}

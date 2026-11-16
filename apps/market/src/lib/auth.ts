@@ -7,9 +7,12 @@ import type { User } from './db';
 export async function exchangeAuth(path:string,body:unknown) {
   const incoming=await headers();
   const response=await fetch(`${backendOrigin}/auth/${path}`,{method:'POST',headers:{'Content-Type':'application/json','User-Agent':incoming.get('user-agent')||'Market','X-Real-IP':incoming.get('x-real-ip')||'','X-Forwarded-For':incoming.get('x-real-ip')||''},body:JSON.stringify(body),cache:'no-store',signal:AbortSignal.timeout(15000)});
-  const result=await response.json();if(!response.ok)throw new Error(result.message||'Не удалось выполнить вход.');return result;
+  const result=await response.json();if(!response.ok)throw Object.assign(new Error(result.message||'Не удалось выполнить вход.'),{status:response.status,code:result.code});return result;
 }
-export async function createSession(token:string) {(await cookies()).set(MARKET_COOKIE,token,{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/',maxAge:7200});}
+export async function createSession(token:string) {
+  if(typeof token!=='string'||!token)throw new Error('Не удалось создать сессию.');
+  (await cookies()).set(MARKET_COOKIE,token,{httpOnly:true,sameSite:'lax',secure:process.env.COOKIE_SECURE!=='false',path:'/',maxAge:7200});
+}
 export const getCurrentUser=cache(async():Promise<User|null>=>{
   if(!(await cookies()).get(MARKET_COOKIE)?.value)return null;
   try{return await marketRpc('currentUser');}catch(error){if((error as {status?:number}).status===401)return null;throw error;}

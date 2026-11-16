@@ -56,6 +56,8 @@ export type CatalogSection = {
   id: string;
   slug: string;
   name: string;
+  area?: 'accounts' | 'services';
+  enabled?: boolean;
 };
 
 export type CatalogItem = {
@@ -69,6 +71,7 @@ export type CatalogItem = {
   themeFrom: string;
   themeTo: string;
   sections: CatalogSection[];
+  availability?: {accounts?: boolean; services?: boolean};
   createdAt: Date;
   updatedAt: Date;
 };
@@ -82,6 +85,7 @@ export type Listing = {
   description: string;
   deliveryNote: string | null;
   priceRub: number;
+  priceUsdt?: string;
   status: ListingStatus;
   deliveryType: ListingDeliveryType;
   quantity?: number;
@@ -104,6 +108,9 @@ export type Order = {
   sellerId: string;
   status: OrderStatus;
   amountRub: number;
+  amountUsdt?: string;
+  requestKey?: string;
+  quantity?: number;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -133,6 +140,7 @@ export type WalletTransaction = {
   type: WalletTransactionType;
   status: WalletTransactionStatus;
   amountRub: number;
+  amountUsdt?: string;
   description: string;
   createdAt: Date;
 };
@@ -161,8 +169,11 @@ export type ProjectTask = {
   targetSource: string;
   targets: string[];
   rewardPerTargetRub: number;
+  rewardPerTargetUsdt?: string;
   targetCount: number;
   totalBudgetRub: number;
+  totalBudgetUsdt?: string;
+  requestKey?: string;
   completedCount: number;
   status: ProjectTaskStatus;
   createdAt: Date;
@@ -237,6 +248,7 @@ type Store = {
   conversations: Conversation[];
   messages: Message[];
   walletTransactions: WalletTransaction[];
+  usdtBalances?: ReadonlyMap<string,string>;
   supportTickets: SupportTicket[];
   projectTasks: ProjectTask[];
   projectPlatformSettings: ProjectPlatformSetting[];
@@ -253,6 +265,7 @@ type OrderWithRelations = Order & {
 };
 
 export type CatalogLibraryItem = CatalogItem & {
+  visitCounts?: {accounts:number; services:number};
   listingCount: number;
   minPriceRub: number | null;
   sectionStats: Array<CatalogSection & { listingsCount: number }>;
@@ -304,6 +317,8 @@ export type PurchaseResult = {
 
 export type WalletOverview = {
   availableRub: number;
+  availableUsdt: string;
+  exchangeUsdt: string;
   transactions: WalletTransaction[];
 };
 
@@ -316,6 +331,7 @@ export type UserProfileData = {
     activeListings: number;
     activeProjects: number;
     totalTurnoverRub: number;
+    totalTurnoverUsdt: string;
   };
   recentPurchases: OrderWithRelations[];
   recentSales: OrderWithRelations[];
@@ -1364,10 +1380,11 @@ function loadStore(): Store {
 }
 
 export function createProductionStore() {
-  return serializeStore({version:STORE_VERSION,users:[],sessions:[],catalogItems:buildCatalogItems(),listings:[],orders:[],conversations:[],messages:[],walletTransactions:[],supportTickets:[],projectTasks:[],projectPlatformSettings:mergeProjectPlatformSettings(),projectServiceSettings:mergeProjectServiceSettings(),projectPlatformServices:mergeProjectPlatformServices()});
+  return serializeStore({version:STORE_VERSION,users:[],sessions:[],catalogItems:[],listings:[],orders:[],conversations:[],messages:[],walletTransactions:[],supportTickets:[],projectTasks:[],projectPlatformSettings:mergeProjectPlatformSettings(),projectServiceSettings:mergeProjectServiceSettings(),projectPlatformServices:mergeProjectPlatformServices()});
 }
-export function withMarketStore<T>(payload: PersistedStore, operation: (store: Store) => T) {
+export function withMarketStore<T>(payload: PersistedStore, operation: (store: Store) => T, usdtBalances?: ReadonlyMap<string,string>) {
   const store=deserializeStore(payload);
+  store.usdtBalances=usdtBalances;
   return marketContext.run(store,()=>({result:operation(store),payload:serializeStore(store)}));
 }
 
@@ -1389,6 +1406,28 @@ function getOrderRelations(store: Store, order: Order): OrderWithRelations {
     buyer,
     seller,
   };
+}
+
+const usdtScale = 1_000_000n;
+function usdtUnits(value: string) {
+  const [whole, fraction = ""] = value.split(".");
+  return BigInt(whole) * usdtScale + BigInt(fraction.padEnd(6, "0"));
+}
+
+function usdtTotal(price: string | undefined, quantity: number) {
+  if (price === undefined) return undefined;
+  return formatUsdtUnits(usdtUnits(price) * BigInt(quantity));
+}
+
+function formatUsdtUnits(units: bigint) {
+  return `${units / usdtScale}.${String(units % usdtScale).padStart(6, "0")}`;
+}
+
+function assertMarketFunds(store: Store, userId: string, rub: number, usdt?: string) {
+  if (usdt === undefined ? getWalletBalanceRub(store, userId) < rub
+    : usdtUnits(store.usdtBalances?.get(userId) ?? "0") < usdtUnits(usdt)) {
+    throw new Error("INSUFFICIENT_FUNDS");
+  }
 }
 
 function getWalletBalanceRub(store: Store, userId: string) {
@@ -1533,11 +1572,15 @@ export function updateUserCurrency(userId: string, currency: CurrencyCode) {
   });
 }
 
-export function getCatalogLibrary(query?: string) {
+const sectionArea=(section:CatalogSection):'accounts'|'services'=>section.area??(/^(аккаунт[ыа]?|accounts?)$/i.test(section.name.trim())?'accounts':'services');
+const availableSections=(item:CatalogItem)=>item.sections.filter(section=>section.enabled!==false&&item.availability?.[sectionArea(section)]!==false);
+function catalogLibrary(query?: string,includeDisabled=false): CatalogLibraryItem[] {
   const store = loadStore();
   const normalizedQuery = query?.trim().toLowerCase() ?? "";
 
   return store.catalogItems
+    .map(item=>includeDisabled?item:{...item,sections:availableSections(item)})
+    .filter(item=>includeDisabled||item.sections.length>0)
     .filter((item) => {
       if (!normalizedQuery) {
         return true;
@@ -1549,8 +1592,9 @@ export function getCatalogLibrary(query?: string) {
       );
     })
     .map((item) => {
-      const itemListings = store.listings.filter((listing) => listing.itemId === item.id && listing.status === "ACTIVE");
-      const minPriceRub = itemListings.length ? Math.min(...itemListings.map((listing) => listing.priceRub)) : null;
+      const itemListings = store.listings.filter((listing) => listing.itemId === item.id && listing.status === "ACTIVE"&&item.sections.some(section=>section.id===listing.sectionId));
+      const rubPrices = itemListings.filter(listing => listing.priceUsdt === undefined).map(listing => listing.priceRub);
+      const minPriceRub = rubPrices.length ? Math.min(...rubPrices) : null;
 
       return {
         ...item,
@@ -1571,6 +1615,8 @@ export function getCatalogLibrary(query?: string) {
     }) satisfies CatalogLibraryItem[];
 }
 
+export function getCatalogLibrary(query?:string){return catalogLibrary(query);}
+
 export function getFeaturedCatalogItems() {
   return getCatalogLibrary()
     .filter((item) => item.featured && item.listingCount > 0)
@@ -1582,9 +1628,10 @@ export function getCatalogItemBySlug(
   filters?: { section?: string; query?: string; onlineOnly?: boolean },
 ) {
   const store = loadStore();
-  const item = store.catalogItems.find((entry) => entry.slug === slug);
+  const original = store.catalogItems.find((entry) => entry.slug === slug);
+  const item=original?{...original,sections:availableSections(original)}:null;
 
-  if (!item) {
+  if (!item||!item.sections.length||filters?.section&&!item.sections.some(section=>section.id===filters.section)) {
     return null;
   }
 
@@ -1592,7 +1639,7 @@ export function getCatalogItemBySlug(
   const normalizedQuery = filters?.query?.trim().toLowerCase() ?? "";
   const listings = sortByDateDesc(
     store.listings
-      .filter((listing) => listing.itemId === item.id && listing.status === "ACTIVE")
+      .filter((listing) => listing.itemId === item.id && listing.status === "ACTIVE"&&item.sections.some(section=>section.id===listing.sectionId))
       .filter((listing) => (filters?.section ? listing.sectionId === filters.section : true))
       .filter((listing) => (filters?.onlineOnly ? listing.isOnline : true))
       .filter((listing) => {
@@ -1616,7 +1663,7 @@ export function getCatalogItemBySlug(
 
   return {
     ...item,
-    listingCount: getCatalogListingCount(store, item.id),
+    listingCount: listings.length,
     selectedSection,
     sectionStats: item.sections.map((section) => ({
       ...section,
@@ -1628,14 +1675,15 @@ export function getCatalogItemBySlug(
 
 export function getListingDetails(itemSlug: string, listingId: string) {
   const store = loadStore();
-  const item = store.catalogItems.find((entry) => entry.slug === itemSlug);
+  const original = store.catalogItems.find((entry) => entry.slug === itemSlug);
+  const item=original?{...original,sections:availableSections(original)}:null;
 
   if (!item) {
     return null;
   }
 
   const listing = store.listings.find(
-    (entry) => entry.id === listingId && entry.itemId === item.id && entry.status === "ACTIVE",
+    (entry) => entry.id === listingId && entry.itemId === item.id && entry.status === "ACTIVE"&&item.sections.some(section=>section.id===entry.sectionId),
   );
 
   if (!listing) {
@@ -1777,6 +1825,8 @@ export function getWalletOverview(userId: string, statusFilter?: WalletTransacti
 
   return {
     availableRub: getWalletBalanceRub(store, userId),
+    availableUsdt: store.usdtBalances?.get(userId) ?? "0",
+    exchangeUsdt: "0",
     transactions,
   } satisfies WalletOverview;
 }
@@ -1973,9 +2023,16 @@ export function createProjectRecord(
     targetSource: string;
     targets: string[];
     rewardPerTargetRub: number;
+    rewardPerTargetUsdt?: string;
+    requestKey?: string;
   },
 ) {
   return updateStore((store) => {
+    if (input.rewardPerTargetUsdt !== undefined && !input.requestKey) throw new Error("REQUEST_KEY_REQUIRED");
+    if (input.requestKey) {
+      const previous = store.projectTasks.find(project => project.customerId === customerId && project.requestKey === input.requestKey);
+      if (previous) return previous;
+    }
     const customer = store.users.find((entry) => entry.id === customerId);
 
     if (!customer) {
@@ -1988,12 +2045,11 @@ export function createProjectRecord(
       throw new Error("TARGETS_REQUIRED");
     }
 
-    const rewardPerTargetRub = Math.max(1, Math.round(input.rewardPerTargetRub));
+    const rewardPerTargetUsdt = input.rewardPerTargetUsdt;
+    const rewardPerTargetRub = rewardPerTargetUsdt === undefined ? Math.max(1, Math.round(input.rewardPerTargetRub)) : 0;
     const totalBudgetRub = rewardPerTargetRub * targets.length;
-
-    if (getWalletBalanceRub(store, customerId) < totalBudgetRub) {
-      throw new Error("INSUFFICIENT_FUNDS");
-    }
+    const totalBudgetUsdt = usdtTotal(rewardPerTargetUsdt, targets.length);
+    assertMarketFunds(store, customerId, totalBudgetRub, totalBudgetUsdt);
 
     const timestamp = now();
     const project: ProjectTask = {
@@ -2010,8 +2066,11 @@ export function createProjectRecord(
       targetSource: input.targetSource,
       targets,
       rewardPerTargetRub,
+      rewardPerTargetUsdt,
       targetCount: targets.length,
       totalBudgetRub,
+      totalBudgetUsdt,
+      requestKey: input.requestKey,
       completedCount: 0,
       status: "OPEN",
       createdAt: timestamp,
@@ -2026,6 +2085,7 @@ export function createProjectRecord(
       type: "PURCHASE",
       status: "COMPLETED",
       amountRub: -totalBudgetRub,
+      amountUsdt: totalBudgetUsdt === undefined ? undefined : `-${totalBudgetUsdt}`,
       description: `Резерв бюджета задачи ${getProjectPlatformCatalogName(project.platform)} · ${project.title}`,
       createdAt: timestamp,
     });
@@ -2072,6 +2132,7 @@ export function acceptProjectRecord(executorId: string, projectId: string) {
       description: project.description,
       deliveryNote: `Цели: ${project.targetCount}. Отслеживание прогресса ведётся в проекте и чате.`,
       priceRub: project.totalBudgetRub,
+      priceUsdt: project.totalBudgetUsdt,
       status: "PAUSED",
       deliveryType: "MANUAL",
       isOnline: true,
@@ -2092,6 +2153,7 @@ export function acceptProjectRecord(executorId: string, projectId: string) {
       sellerId: executorId,
       status: "PENDING",
       amountRub: project.totalBudgetRub,
+      amountUsdt: project.totalBudgetUsdt,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -2115,7 +2177,7 @@ export function acceptProjectRecord(executorId: string, projectId: string) {
       text: [
         `Принял задачу ${getProjectPlatformCatalogName(project.platform)}: ${project.title}`,
         `Целей: ${project.targetCount}`,
-        `Бюджет: ${project.totalBudgetRub} RUB.`,
+        `Бюджет: ${project.totalBudgetUsdt ?? project.totalBudgetRub} ${project.totalBudgetUsdt === undefined ? "RUB" : "USDT"}.`,
         project.messageText ? `Текст для выполнения:\n${project.messageText}` : null,
       ]
         .filter(Boolean)
@@ -2198,6 +2260,7 @@ export function completeProjectRecord(customerId: string, projectId: string) {
       type: "SALE",
       status: "COMPLETED",
       amountRub: project.totalBudgetRub,
+      amountUsdt: project.totalBudgetUsdt,
       description: `Выплата за задачу ${getProjectPlatformCatalogName(project.platform)} · ${project.title}`,
       createdAt: timestamp,
     });
@@ -2232,6 +2295,7 @@ export function createListingRecord(
     description: string;
     deliveryNote?: string;
     priceRub: number;
+    priceUsdt?: string;
     quantity?: number;
     autoPayloads?: string[];
     deliveryType: ListingDeliveryType;
@@ -2247,7 +2311,7 @@ export function createListingRecord(
 
     const section = item.sections.find((entry) => entry.id === input.sectionId);
 
-    if (!section) {
+    if (!section||!availableSections(item).some(entry=>entry.id===section.id)) {
       throw new Error("SECTION_NOT_FOUND");
     }
 
@@ -2267,6 +2331,7 @@ export function createListingRecord(
       description: input.description,
       deliveryNote: input.deliveryNote?.trim() || null,
       priceRub: input.priceRub,
+      priceUsdt: input.priceUsdt,
       status: input.isActive ? "ACTIVE" : "PAUSED",
       deliveryType: input.deliveryType,
       quantity: input.quantity ?? 1,
@@ -2300,14 +2365,24 @@ export function createPurchaseRecord(
     listingId: string;
     quantity: number;
     message?: string;
+    requestKey?: string;
   },
 ) {
   return updateStore((store) => {
+    if (input.requestKey) {
+      const previous = store.orders.find(order => order.buyerId === buyerId && order.requestKey === input.requestKey);
+      if (previous) {
+        if (previous.listingId !== input.listingId || previous.quantity !== input.quantity) throw new Error("ORDER_REQUEST_CONFLICT");
+        const conversation = store.conversations.find(entry => entry.orderId === previous.id)!;
+        return {orderId:previous.id,conversationId:conversation.id};
+      }
+    }
     const listing = store.listings.find((entry) => entry.id === input.listingId && entry.status === "ACTIVE");
 
     if (!listing) {
       throw new Error("LISTING_NOT_FOUND");
     }
+    if (listing.priceUsdt !== undefined && !input.requestKey) throw new Error("REQUEST_KEY_REQUIRED");
 
     if (listing.sellerId === buyerId) {
       throw new Error("SELF_PURCHASE");
@@ -2321,10 +2396,13 @@ export function createPurchaseRecord(
       throw new Error("PURCHASE_RELATION_NOT_FOUND");
     }
 
+    if(!availableSections(item).some(section=>section.id===listing.sectionId))throw new Error('CATALOG_UNAVAILABLE');
+
     const quantity = Math.max(1, input.quantity);
     const timestamp = now();
     const amountRub = Math.round(listing.priceRub * quantity * 100)/100;
-    if (getWalletBalanceRub(store,buyerId) < amountRub) throw new Error('INSUFFICIENT_FUNDS');
+    const amountUsdt = usdtTotal(listing.priceUsdt, quantity);
+    assertMarketFunds(store, buyerId, amountRub, amountUsdt);
     if (quantity > (listing.quantity ?? 1)) throw new Error('INSUFFICIENT_STOCK');
     if (listing.deliveryType === 'AUTO' && (listing.autoPayloads?.length ?? 0) < quantity) throw new Error('INSUFFICIENT_STOCK');
     listing.quantity=(listing.quantity ?? 1)-quantity;
@@ -2342,6 +2420,9 @@ export function createPurchaseRecord(
       sellerId: listing.sellerId,
       status: "PENDING",
       amountRub,
+      amountUsdt,
+      requestKey: input.requestKey,
+      quantity,
       createdAt: timestamp,
       updatedAt: timestamp,
     };
@@ -2365,6 +2446,7 @@ export function createPurchaseRecord(
       type: "PURCHASE",
       status: "COMPLETED",
       amountRub: -amountRub,
+      amountUsdt: amountUsdt === undefined ? undefined : `-${amountUsdt}`,
       description: `Ожидающий заказ ${orderId.slice(0, 8).toUpperCase()} · ${listing.title}`,
       createdAt: timestamp,
     });
@@ -2419,6 +2501,9 @@ export function getUserProfileData(userId: string) {
       totalTurnoverRub: sales
         .filter((order) => order.status === "CLOSED" || order.status === "DISPUTED")
         .reduce((sum, order) => sum + order.amountRub, 0),
+      totalTurnoverUsdt: formatUsdtUnits(sales
+        .filter(order => order.status === "CLOSED" || order.status === "DISPUTED")
+        .reduce((sum, order) => sum + usdtUnits(order.amountUsdt ?? "0"), 0n)),
     },
     recentPurchases: sortByDateDesc(purchases.map((order) => getOrderRelations(store, order)), "createdAt").slice(0, 4),
     recentSales: sortByDateDesc(sales.map((order) => getOrderRelations(store, order)), "createdAt").slice(0, 4),
@@ -2446,7 +2531,7 @@ export function updateOrderStatusAsAdmin(orderId: string, status: OrderStatus) {
     if (order.status === status) return;
     if (['CLOSED','REFUNDED'].includes(order.status)) throw new Error('ORDER_ALREADY_SETTLED');
     if (status === 'CLOSED' || status === 'REFUNDED') {
-      store.walletTransactions.push({id:createId(),userId:status==='CLOSED'?order.sellerId:order.buyerId,orderId:order.id,type:status==='CLOSED'?'SALE':'REFUND',status:'COMPLETED',amountRub:order.amountRub,description:status==='CLOSED'?'Оплата завершённого заказа':'Возврат по заказу',createdAt:now()});
+      store.walletTransactions.push({id:createId(),userId:status==='CLOSED'?order.sellerId:order.buyerId,orderId:order.id,type:status==='CLOSED'?'SALE':'REFUND',status:'COMPLETED',amountRub:order.amountRub,amountUsdt:order.amountUsdt,description:status==='CLOSED'?'Оплата завершённого заказа':'Возврат по заказу',createdAt:now()});
       const project=store.projectTasks.find(p=>p.id===order.projectId);
       if (project) project.status=status==='CLOSED'?'COMPLETED':'CANCELLED';
     }
@@ -2460,6 +2545,7 @@ export function createCatalogItemRecord(input: {
   kind: CatalogKind;
   family: CatalogFamily;
   description?: string;
+  area?: 'accounts' | 'services' | 'both';
 }) {
   return updateStore((store) => {
     const timestamp = now();
@@ -2476,11 +2562,11 @@ export function createCatalogItemRecord(input: {
       name: input.name,
       kind: input.kind,
       family: input.family,
-      description: input.description?.trim() || buildCatalogDescription(input),
+      description: input.description?.trim() || `Объявления пользователей в категории ${input.name}.`,
       featured: false,
       themeFrom: theme.from,
       themeTo: theme.to,
-      sections: getSectionsForFamily(input.family).map((sectionName) => ({
+      sections: (input.area==='accounts'?['Аккаунты']:input.area==='services'?['Услуги']:['Аккаунты','Услуги']).map((sectionName) => ({
         id: `section-${slug}-${slugify(sectionName)}`,
         slug: slugify(sectionName),
         name: sectionName,
@@ -2494,7 +2580,7 @@ export function createCatalogItemRecord(input: {
   });
 }
 
-export function createCatalogSectionRecord(itemId: string, sectionName: string) {
+export function createCatalogSectionRecord(itemId: string, sectionName: string, area?: 'accounts' | 'services') {
   return updateStore((store) => {
     const item = store.catalogItems.find((entry) => entry.id === itemId);
 
@@ -2503,18 +2589,31 @@ export function createCatalogSectionRecord(itemId: string, sectionName: string) 
     }
 
     const slug = slugify(sectionName);
+    const targetArea=area??(/^(аккаунт[ыа]?|accounts?)$/i.test(sectionName.trim())?'accounts':'services');
 
-    if (item.sections.some((section) => section.slug === slug || section.name === sectionName)) {
+    if (item.sections.some((section) => sectionArea(section)===targetArea&&(section.slug === slug || section.name.toLocaleLowerCase('ru') === sectionName.toLocaleLowerCase('ru')))) {
       throw new Error("SECTION_EXISTS");
     }
 
     item.sections.push({
-      id: `section-${item.slug}-${slug}`,
+      id: `section-${item.slug}-${targetArea}-${slug}`,
       slug,
       name: sectionName,
+      area:targetArea,
     });
     item.updatedAt = now();
   });
+}
+
+export function updateCatalogAvailabilityRecord(itemId:string,area:'accounts'|'services',sectionIds:string[],enabled:boolean){
+ return updateStore(store=>{
+  const item=store.catalogItems.find(entry=>entry.id===itemId);if(!item)throw new Error('CATALOG_ITEM_NOT_FOUND');
+  const sections=item.sections.filter(section=>sectionArea(section)===area);
+  if(!['accounts','services'].includes(area)||typeof enabled!=='boolean'||!Array.isArray(sectionIds)||new Set(sectionIds).size!==sectionIds.length||sectionIds.some(id=>!sections.some(section=>section.id===id)))throw new Error('INVALID_CATALOG_AVAILABILITY');
+  item.availability={...item.availability,[area]:enabled};
+  for(const section of sections)section.enabled=sectionIds.includes(section.id);
+  item.updatedAt=now();
+ });
 }
 
 export function getAdminDashboardData() {
@@ -2532,7 +2631,7 @@ export function getAdminDashboardData() {
     },
     recentUsers: sortByDateDesc(store.users, "createdAt").slice(0, 8),
     recentOrders: sortByDateDesc(store.orders.map((order) => getOrderRelations(store, order)), "createdAt").slice(0, 12),
-    catalogItems: getCatalogLibrary().slice(0, 24),
+    catalogItems: catalogLibrary(undefined,true),
     tickets: sortByDateDesc(store.supportTickets, "updatedAt").slice(0, 12),
     projectSettings: {
       platforms: store.projectPlatformSettings,

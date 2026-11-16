@@ -22,9 +22,7 @@ import { FeatureGate } from "./Components/FeatureGate/FeatureGate";
 import { Download } from "./Pages/Download/Download";
 import {News,About} from './Pages/Content/Content';
 import {Bonuses} from './Pages/Content/Bonuses';
-import {Swap} from './Pages/Content/Swap';
 import {CreateCoin} from './Pages/Content/CreateCoin';
-import {TronSwap} from './Pages/Content/TronSwap';
 import {SwapLayout} from './Pages/Content/SwapLayout';
 const Trade = lazy(() => import("./Pages/Trade/Trade").then((module) => ({ default: module.Trade })));
 const commercePage = (name) => lazy(() => import('./Pages/Commerce/Commerce').then(module => ({default:module[name]})));
@@ -51,9 +49,9 @@ export const Router = () => {
       </Route>
       <Route element={<AuthGuard />}>
         <Route path="/swap" element={<SwapLayout/>}>
-          <Route index element={<Swap/>}/>
-          <Route path="tron" element={<TronSwap/>}/>
-          <Route path="create" element={<CreateCoin/>}/>
+          <Route index element={<CreateCoin/>}/>
+          <Route path="tron" element={<Navigate to="/swap" replace/>}/>
+          <Route path="create" element={<Navigate to="/swap" replace/>}/>
         </Route>
         <Route path="/create-coin" element={<Navigate to="/swap/create" replace/>}/>
         <Route path="/bonuses" element={<Bonuses/>}/>
