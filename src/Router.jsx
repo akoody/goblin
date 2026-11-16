@@ -26,7 +26,7 @@ import {CreateCoin} from './Pages/Content/CreateCoin';
 import {SwapLayout} from './Pages/Content/SwapLayout';
 const Trade = lazy(() => import("./Pages/Trade/Trade").then((module) => ({ default: module.Trade })));
 const commercePage = (name) => lazy(() => import('./Pages/Commerce/Commerce').then(module => ({default:module[name]})));
-const Market=commercePage('Market'), MarketSell=commercePage('MarketSell'), MarketOrders=commercePage('MarketOrders'), MarketWallet=commercePage('MarketWallet'), Guarantor=commercePage('Guarantor'), CommerceDeal=commercePage('CommerceDeal'), CommerceAdmin=commercePage('CommerceAdmin');
+const Guarantor=commercePage('Guarantor'), CommerceDeal=commercePage('CommerceDeal'), CommerceAdmin=commercePage('CommerceAdmin');
 const loadingPage = (page) => <Suspense fallback={<Loader />}>{page}</Suspense>;
 function OriginalMarket(){useEffect(()=>{window.location.replace(window.location.pathname+window.location.search);},[]);return <Loader/>;}
 
